@@ -2251,11 +2251,12 @@ def render_crm(cx_df):
                         if succ_mail:
                             st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
 
-                now_call_at = datetime.now().strftime("%Y-%m-%d") if c else ""
+                has_activity = bool(c or su or it or poa or r or f)
+                now_call_at = datetime.now().strftime("%Y-%m-%d") if has_activity else ""
                 # Fetch previous last_call_at if present
                 curr_row = conn.execute("SELECT last_call_at FROM customer_interactions WHERE phone = ?", (p,)).fetchone()
                 prev_last_call = curr_row[0] if (curr_row and curr_row[0]) else ""
-                final_last_call = now_call_at if c else prev_last_call
+                final_last_call = now_call_at if (has_activity and not prev_last_call) else (now_call_at if has_activity else prev_last_call)
 
                 conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
                 conn.execute('''
@@ -2274,10 +2275,12 @@ def render_telecalling_analytics(conn):
     tab_calls, tab_followups = st.tabs(["📞 Daily Call Performance", "⏰ Scheduled Follow-ups Tracker"])
     
     with tab_calls:
-        # Query customer interactions with logged call status
+        # Query customer interactions with logged call status, remarks, or follow up
         interactions_df = pd.read_sql("""
             SELECT * FROM customer_interactions 
-            WHERE call_status IS NOT NULL AND call_status != ''
+            WHERE (call_status IS NOT NULL AND call_status != '')
+               OR (remarks IS NOT NULL AND remarks != '')
+               OR (follow_up IS NOT NULL AND follow_up != '')
         """, conn)
         
         if not interactions_df.empty:
