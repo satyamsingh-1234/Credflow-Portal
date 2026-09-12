@@ -2337,9 +2337,6 @@ def render_crm(cx_df):
                     ''', (p, w, fw, e, c, su, it, poa, r, f, ec, final_last_call))
                 conn.commit()
                 st.toast("✅ Auto-saved changes to database!", icon="💾")
-                import time
-                time.sleep(1)
-                st.rerun()
 def render_telecalling_analytics(conn):
     pass
 
