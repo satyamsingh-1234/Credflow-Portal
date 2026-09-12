@@ -1560,31 +1560,6 @@ def render_dashboard(df_sales, prefix):
             else:
                 st.info("No plan data to display.")
 
-    # ── ROW 3.5: Date-Wise Usage Breakdown Chart ──
-    if 'Plan Stat Date' in dash_df.columns:
-        dash_df_chart = dash_df.copy()
-        dash_df_chart['Month_Year'] = pd.to_datetime(dash_df_chart['Plan Stat Date'], errors='coerce', dayfirst=True).dt.to_period('M').astype(str)
-        date_usage_df = dash_df_chart.groupby(['Month_Year', 'Usage check']).size().reset_index(name='Count')
-        date_usage_df = date_usage_df[date_usage_df['Month_Year'] != 'NaT']
-        
-        if not date_usage_df.empty:
-            st.markdown("#### 📈 Date-Wise Usage Health Trend (Monthly Breakdown)")
-            fig_date_trend = px.bar(
-                date_usage_df,
-                x='Month_Year',
-                y='Count',
-                color='Usage check',
-                title='Monthly Customer Onboarding & Usage Health Breakdown',
-                color_discrete_map={
-                    'No Usage 🔴': '#EF4444',
-                    'Low Usage 🟡': '#F59E0B',
-                    'Proper Usage 🟢': '#10B981',
-                    'No Data': '#9CA3AF'
-                },
-                barmode='stack'
-            )
-            st.plotly_chart(fig_date_trend, use_container_width=True)
-
     # ── ROW 4: Outreach Progress Bar ──
     if unique_cx > 0:
         pct_reached = round(total_reached / unique_cx * 100)
