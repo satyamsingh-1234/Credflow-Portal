@@ -2422,15 +2422,78 @@ def render_telecalling_analytics(conn):
             
             # ── 3. DETAILED LOG FOR SELECTED DATE ──
             st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
+            st.caption("💡 **Interactive Remarks & Details Editor**: Aap is table mein kisi bhi customer ke **Remarks 📝**, **Call Status 📞**, **Issue Type 🏷️**, ya **Plan of Action 🎯** direct edit kar sakte hain — updates automatically save ho jayenge.")
             if not date_calls_df.empty:
                 show_cols = [c for c in ['phone', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in date_calls_df.columns]
                 date_calls_display = date_calls_df[show_cols].copy()
                 if 'last_call_at' in date_calls_display.columns:
                     date_calls_display['last_call_at'] = pd.to_datetime(date_calls_display['last_call_at'], errors='coerce').dt.strftime('%Y-%m-%d').fillna(date_calls_display['last_call_at'])
                 date_calls_display = date_calls_display.rename(columns={'last_call_at': 'call_date'})
-                st.dataframe(date_calls_display, use_container_width=True)
                 
-                excel_tele = to_excel_download(date_calls_display, sheet_name="Telecalling_Log")
+                existing_issues = [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()]
+                
+                edited_tele_df = st.data_editor(
+                    date_calls_display,
+                    key=f"tele_editor_{sel_date_str}",
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "phone": st.column_config.TextColumn("Phone 📞", disabled=True),
+                        "call_status": st.column_config.SelectboxColumn(
+                            "Call Status 📞",
+                            options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
+                            width="medium"
+                        ),
+                        "issue_type": st.column_config.SelectboxColumn(
+                            "Issue Type 🏷️",
+                            options=[""] + existing_issues,
+                            width="medium"
+                        ),
+                        "plan_of_action": st.column_config.SelectboxColumn(
+                            "Plan of Action 🎯",
+                            options=["", "Demo Diya", "Training Link", "Support ko connect karwaya", "Other"],
+                            width="medium"
+                        ),
+                        "remarks": st.column_config.TextColumn("Remarks / Notes 📝 (Edit Me ✏️)", width="large"),
+                        "call_date": st.column_config.TextColumn("Call Date 📅", disabled=True)
+                    },
+                    disabled=["phone", "call_date"]
+                )
+
+                # Auto-save changes in Telecalling Detailed Log
+                diff_tele_remarks = date_calls_display['remarks'].fillna('').astype(str).str.strip() != edited_tele_df['remarks'].fillna('').astype(str).str.strip() if 'remarks' in date_calls_display.columns else pd.Series(False, index=date_calls_display.index)
+                diff_tele_status = date_calls_display['call_status'].fillna('').astype(str).str.strip() != edited_tele_df['call_status'].fillna('').astype(str).str.strip() if 'call_status' in date_calls_display.columns else pd.Series(False, index=date_calls_display.index)
+                diff_tele_issue = date_calls_display['issue_type'].fillna('').astype(str).str.strip() != edited_tele_df['issue_type'].fillna('').astype(str).str.strip() if 'issue_type' in date_calls_display.columns else pd.Series(False, index=date_calls_display.index)
+                diff_tele_poa = date_calls_display['plan_of_action'].fillna('').astype(str).str.strip() != edited_tele_df['plan_of_action'].fillna('').astype(str).str.strip() if 'plan_of_action' in date_calls_display.columns else pd.Series(False, index=date_calls_display.index)
+                
+                diff_tele = diff_tele_remarks | diff_tele_status | diff_tele_issue | diff_tele_poa
+                if diff_tele.any():
+                    changed_tele = edited_tele_df[diff_tele]
+                    for idx, row in changed_tele.iterrows():
+                        p = str(row.get('phone', '')).replace('.0', '').strip()
+                        if not p: continue
+                        r = str(row.get('remarks', ''))
+                        c = str(row.get('call_status', ''))
+                        it = str(row.get('issue_type', ''))
+                        poa = str(row.get('plan_of_action', ''))
+                        cd_val = str(row.get('call_date', ''))
+                        conn.execute('''
+                            INSERT INTO customer_interactions (phone, call_status, issue_type, plan_of_action, remarks, last_call_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(phone) DO UPDATE SET
+                                call_status = CASE WHEN excluded.call_status != '' THEN excluded.call_status ELSE call_status END,
+                                issue_type = CASE WHEN excluded.issue_type != '' THEN excluded.issue_type ELSE issue_type END,
+                                plan_of_action = CASE WHEN excluded.plan_of_action != '' THEN excluded.plan_of_action ELSE plan_of_action END,
+                                remarks = excluded.remarks,
+                                last_call_at = CASE WHEN excluded.last_call_at != '' THEN excluded.last_call_at ELSE last_call_at END
+                        ''', (p, c, it, poa, r, cd_val))
+                    conn.commit()
+                    st.toast("✅ Remarks & Call Details saved to Database!", icon="💾")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                
+                excel_tele = to_excel_download(edited_tele_df, sheet_name="Telecalling_Log")
                 st.download_button("📥 Export Selected Date Call Log (Excel)", data=excel_tele, file_name=f"Telecalling_Log_{sel_date_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
             else:
                 st.info(f"ℹ️ No calls logged on {selected_date.strftime('%d %b %Y')} yet. Select another date above to view past call logs.")
