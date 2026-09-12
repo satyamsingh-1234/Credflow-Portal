@@ -3102,6 +3102,40 @@ def render_template_manager(conn):
                         st.rerun()
 
 
+# ── SIDEBAR ACCESS CONTROL (ADMIN VS VIEW-ONLY) ──
+if 'admin_unlocked' not in st.session_state:
+    st.session_state['admin_unlocked'] = False
+
+st.sidebar.markdown("## 🔒 Access & Role Control")
+role_mode = st.sidebar.radio(
+    "Select Access Mode",
+    ["👁️ View-Only Mode", "🔑 Admin Access"],
+    index=1 if st.session_state['admin_unlocked'] else 0,
+    help="View-Only Mode lets everyone inspect data & dashboards safely. Admin Access unlocks data upload & deletion."
+)
+
+if role_mode == "🔑 Admin Access":
+    if not st.session_state['admin_unlocked']:
+        pass_input = st.sidebar.text_input("Enter Admin Password", type="password", key="admin_pwd_input")
+        if st.sidebar.button("🔓 Unlock Admin Mode", type="primary", use_container_width=True):
+            if pass_input == "credflow2026":
+                st.session_state['admin_unlocked'] = True
+                st.sidebar.success("✅ Admin Mode Unlocked!")
+                st.rerun()
+            else:
+                st.sidebar.error("❌ Incorrect Admin Password!")
+    else:
+        st.sidebar.success("🟢 Admin Mode Active")
+        if st.sidebar.button("🔒 Lock Admin Access", use_container_width=True):
+            st.session_state['admin_unlocked'] = False
+            st.rerun()
+else:
+    st.session_state['admin_unlocked'] = False
+    st.sidebar.info("👁️ View-Only Mode Active. File uploads & batch deletions are locked.")
+
+is_admin = st.session_state.get('admin_unlocked', False)
+
+
 tab_dash, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
     "📊 Main Dashboard & Telecalling CRM",
     "⚔️ Compare 2 Batches Studio",
@@ -3129,7 +3163,10 @@ with tab_tpl:
     render_template_manager(conn)
 
 with tab_upload:
-    action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
+    if not is_admin:
+        st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar and enter the password (`credflow2026`) to unlock these features.")
+    else:
+        action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
     
     if action == "📤 Upload New Master Data":
         st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
