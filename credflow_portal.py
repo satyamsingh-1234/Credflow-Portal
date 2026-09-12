@@ -6,6 +6,7 @@ import plotly.express as px
 import io
 from datetime import datetime, date, timedelta
 import sqlite3
+import time
 import os
 import re
 import urllib.parse
@@ -3237,6 +3238,7 @@ tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 
 with tab_dash:
     with st.spinner("📊 Analyzing Customer Usage Health Matrix & Live CRM Analytics..."):
+        time.sleep(0.18)
         import pandas as pd
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
         if not s_batches.empty:
@@ -3247,22 +3249,27 @@ with tab_dash:
 
 with tab_tele:
     with st.spinner("📞 Computing Daily Telecalling Performance & Call Interaction Metrics..."):
+        time.sleep(0.18)
         render_telecalling_analytics(conn)
 
 with tab_comp:
     with st.spinner("⚔️ Calculating Cohort Comparison & Adoption Growth Rates..."):
+        time.sleep(0.18)
         render_batch_comparison(conn)
 
 with tab_hist:
     with st.spinner("📜 Retrieving WhatsApp & Email Outreach Dispatch Logs..."):
+        time.sleep(0.18)
         render_outreach_history(conn)
 
 with tab_tpl:
     with st.spinner("📝 Loading Interakt WA & Email Outreach Templates..."):
+        time.sleep(0.18)
         render_template_manager(conn)
 
 with tab_upload:
     with st.spinner("⚙️ Loading Master Data Management & Upload Controls..."):
+        time.sleep(0.18)
         if not is_admin:
             st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
         else:
