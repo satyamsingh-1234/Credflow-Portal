@@ -2319,16 +2319,14 @@ def render_telecalling_analytics(conn):
     tab_calls, tab_followups = st.tabs(["📞 Daily Call Performance", "⏰ Scheduled Follow-ups Tracker"])
     
     with tab_calls:
-        # Query customer interactions with logged call status, remarks, or follow up
+        # Query customer interactions strictly with logged call date (last_call_at)
         interactions_df = pd.read_sql("""
             SELECT * FROM customer_interactions 
-            WHERE (call_status IS NOT NULL AND call_status != '')
-               OR (remarks IS NOT NULL AND remarks != '')
-               OR (follow_up IS NOT NULL AND follow_up != '')
+            WHERE last_call_at IS NOT NULL AND last_call_at != ''
         """, conn)
         
         if not interactions_df.empty:
-            # Extract robust call date for grouping
+            # Extract robust call date for grouping strictly from last_call_at
             def _parse_call_date(row):
                 l_at = str(row.get('last_call_at', '')).strip()
                 if len(l_at) >= 10:
@@ -2337,14 +2335,6 @@ def render_telecalling_analytics(conn):
                         if pd.notna(p_dt): return p_dt.date()
                     else:
                         p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
-                        if pd.notna(p_dt): return p_dt.date()
-                f_up = str(row.get('follow_up', '')).strip()
-                if f_up and f_up.lower() not in ['none', 'nat', 'nan', '']:
-                    if len(f_up) >= 10 and f_up[4] == '-' and f_up[7] == '-':
-                        p_dt = pd.to_datetime(f_up[:10], errors='coerce', format='%Y-%m-%d')
-                        if pd.notna(p_dt): return p_dt.date()
-                    else:
-                        p_dt = pd.to_datetime(f_up, errors='coerce', dayfirst=True)
                         if pd.notna(p_dt): return p_dt.date()
                 return None
 
