@@ -1946,13 +1946,12 @@ def render_crm(cx_df):
             'status_update': 'Status Update',
             'call_status': 'Call Status',
             'remarks': 'Remarks',
-            'follow_up': 'Follow-up Date',
+            'follow_up': 'Call Date',
             'issue_type': 'Issue Type',
-            'plan_of_action': 'Plan of Action',
-            'last_call_at': 'Last Call Date'
+            'plan_of_action': 'Plan of Action'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Follow-up Date', 'Last Call Date']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -1987,7 +1986,7 @@ def render_crm(cx_df):
         with filt_c3:
             em_filter = st.selectbox("🎯 Filter by Email Sent", em_opts, key="flt_em")
         with filt_c4:
-            date_filter = st.selectbox("📅 Filter by Follow-up Date", dt_opts, key="flt_date")
+            date_filter = st.selectbox("📅 Filter by Call Date", dt_opts, key="flt_date")
 
         # Commented out because modifying global query_params triggers a full app rerun instead of just the fragment
         # if wa_filter != q_wa: st.query_params["q_flt_wa"] = wa_filter
@@ -2021,7 +2020,7 @@ def render_crm(cx_df):
         # --- Date Filter Logic ---
         today_val = date.today()
         tomorrow_val = today_val + timedelta(days=1)
-        f_dates = pd.to_datetime(ui_df['Follow-up Date'], errors='coerce').dt.date
+        f_dates = pd.to_datetime(ui_df['Call Date'], errors='coerce').dt.date
 
         if date_filter == "Today 📌":
             ui_df = ui_df[f_dates == today_val]
@@ -2128,8 +2127,7 @@ def render_crm(cx_df):
                     width="medium"
                 ),
                 "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
-                "Follow-up Date": st.column_config.DateColumn("Follow-up Date 📅", format="DD/MM/YYYY"),
-                "Last Call Date": st.column_config.TextColumn("Last Call Date 📞", disabled=True)
+                "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
             },
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
@@ -2418,10 +2416,11 @@ def render_telecalling_analytics(conn):
             # ── 3. DETAILED LOG FOR SELECTED DATE ──
             st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
             if not date_calls_df.empty:
-                show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in date_calls_df.columns]
+                show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in date_calls_df.columns]
                 date_calls_display = date_calls_df[show_cols].copy()
                 if 'last_call_at' in date_calls_display.columns:
                     date_calls_display['last_call_at'] = pd.to_datetime(date_calls_display['last_call_at'], errors='coerce').dt.strftime('%Y-%m-%d').fillna(date_calls_display['last_call_at'])
+                date_calls_display = date_calls_display.rename(columns={'last_call_at': 'call_date'})
                 st.dataframe(date_calls_display, use_container_width=True)
                 
                 excel_tele = to_excel_download(date_calls_display, sheet_name="Telecalling_Log")
