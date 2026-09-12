@@ -617,9 +617,74 @@ st.markdown("""
     }
 
     /* Alert Boxes */
-    div[data-testid="stAlert"] {
-        border-radius: 10px !important;
-        border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    /* ── STYLISH CREDFLOW TOP LOADING BAR & DECORATION ── */
+    #stDecoration {
+        background: linear-gradient(90deg, #2563EB, #10B981, #6366F1, #F59E0B, #2563EB) !important;
+        background-size: 300% 100% !important;
+        height: 4px !important;
+        animation: topBarLoading 2s linear infinite !important;
+    }
+
+    @keyframes topBarLoading {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 100% 0%; }
+    }
+
+    /* ── SUPER SLEEK RELOAD / RUNNING INDICATOR ── */
+    div[data-testid="stStatusWidget"] {
+        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%) !important;
+        color: #38BDF8 !important;
+        border: 1px solid #38BDF8 !important;
+        border-radius: 20px !important;
+        padding: 5px 16px !important;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
+        animation: runningPulse 1.2s infinite ease-in-out !important;
+    }
+
+    @keyframes runningPulse {
+        0% { transform: scale(0.98); opacity: 0.85; }
+        50% { transform: scale(1.03); opacity: 1; box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5); }
+        100% { transform: scale(0.98); opacity: 0.85; }
+    }
+
+    /* Multi-color Animated Spinners */
+    .stSpinner > div {
+        border-top-color: #3B82F6 !important;
+        border-right-color: #10B981 !important;
+        border-bottom-color: #F59E0B !important;
+        border-left-color: #6366F1 !important;
+        border-width: 4px !important;
+        border-style: solid !important;
+        border-radius: 50% !important;
+        animation: smoothSpin 0.75s linear infinite !important;
+    }
+
+    @keyframes smoothSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    /* Shimmering Skeleton Loader during Tab/Data Reload */
+    [data-testid="stSkeleton"] {
+        background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%) !important;
+        background-size: 200% 100% !important;
+        animation: shimmerLoader 1.4s infinite !important;
+        border-radius: 8px !important;
+    }
+
+    @keyframes shimmerLoader {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    /* Smooth Content Fade-In on Page Load / Reload */
+    .stApp > div {
+        animation: fadeInPage 0.35s ease-out !important;
+    }
+
+    @keyframes fadeInPage {
+        from { opacity: 0.85; transform: translateY(2px); }
+        to { opacity: 1; transform: translateY(0); }
     }
 </style>
 """, unsafe_allow_html=True)
