@@ -1439,14 +1439,15 @@ def render_dashboard(df_sales, prefix):
         eval_df = eval_df[eval_df['phone'].isin(m_phones)]
         
     if plan_filt:
-        mask = eval_df['plan name'].isin(plan_filt)
-        filtered = filtered[mask]
-        eval_df = eval_df[mask]
+        valid_plan_phones = eval_df[eval_df['plan name'].isin(plan_filt)]['phone'].unique()
+        filtered = filtered[filtered['phone'].isin(valid_plan_phones)]
+        eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
         
     if usage_filt:
-        mask = eval_df['Usage check'].isin(usage_filt)
-        filtered = filtered[mask]
-        eval_df = eval_df[mask]
+        latest_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')
+        valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
+        filtered = filtered[filtered['phone'].isin(valid_usage_phones)]
+        eval_df = eval_df[eval_df['phone'].isin(valid_usage_phones)]
 
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         today_d = date.today()
