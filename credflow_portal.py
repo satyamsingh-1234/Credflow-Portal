@@ -630,23 +630,6 @@ st.markdown("""
         100% { background-position: 100% 0%; }
     }
 
-    /* ── SUPER SLEEK RELOAD / RUNNING INDICATOR ── */
-    div[data-testid="stStatusWidget"] {
-        background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%) !important;
-        color: #38BDF8 !important;
-        border: 1px solid #38BDF8 !important;
-        border-radius: 20px !important;
-        padding: 5px 16px !important;
-        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
-        animation: runningPulse 1.2s infinite ease-in-out !important;
-    }
-
-    @keyframes runningPulse {
-        0% { transform: scale(0.98); opacity: 0.85; }
-        50% { transform: scale(1.03); opacity: 1; box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5); }
-        100% { transform: scale(0.98); opacity: 0.85; }
-    }
-
     /* Multi-color Animated Spinners */
     .stSpinner > div {
         border-top-color: #3B82F6 !important;
@@ -1530,7 +1513,12 @@ def render_dashboard(df_sales, prefix):
                 eval_df = eval_df[eval_df['phone'].isin(target_phones)]
         
     unique_cx = eval_df['phone'].nunique()
-    st.success(f"👥 **Showing {unique_cx} Unique Customers** (Total {len(filtered)} rows in view)")
+    st.markdown(f"""
+    <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 16px; margin: 10px 0 16px 0; color: #166534; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
+        <span>👥 <b>Showing {unique_cx} Unique Customers</b></span>
+        <span style="background: #10B981; color: white; border-radius: 12px; padding: 3px 12px; font-size: 12px; font-weight: 700;">Total {len(filtered)} Rows in View</span>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ── OVERALL DASHBOARD ──────────────────────────────────────────────
     st.markdown("---")
