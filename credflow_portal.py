@@ -2274,8 +2274,68 @@ def render_crm(cx_df):
                         last_call_at=CASE WHEN excluded.call_status != '' THEN excluded.last_call_at ELSE customer_interactions.last_call_at END
                 ''', (p, w, fw, e, c, su, it, poa, r, f, ec, now_call_at))
             conn.commit()
-            st.toast("✅ Auto-saved!", icon="💾")
-            # NOTE: No st.rerun() here — prevents infinite refresh loop
+def render_telecalling_analytics(conn):
+    st.markdown("### 📞 Today's Telecalling Analytics & Performance")
+    st.info("💡 **Live Telecalling Performance Tracker**: Real-time monitoring of calls made, connected status, callbacks requested, and unreachable attempts logged by the support team.")
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    col_date, col_space = st.columns([3, 1])
+    with col_date:
+        selected_date = st.date_input("🗓️ Select Date to View Call Metrics", value=datetime.now().date(), key="tele_date_picker")
+    
+    sel_date_str = selected_date.strftime("%Y-%m-%d")
+    
+    # Query customer interactions
+    interactions_df = pd.read_sql("SELECT * FROM customer_interactions WHERE call_status IS NOT NULL AND call_status != ''", conn)
+    
+    if not interactions_df.empty:
+        # Filter for selected date
+        if 'last_call_at' in interactions_df.columns:
+            date_calls_df = interactions_df[interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str)]
+        else:
+            date_calls_df = interactions_df
+            
+        total_calls = len(date_calls_df)
+        total_all_calls = len(interactions_df)
+        
+        connected_statuses = ["Connected", "Interested", "Converted", "Payment Pending"]
+        callback_statuses = ["Call Later", "Call Back Requested", "Busy", "Ringing"]
+        unreachable_statuses = ["Not Picked", "Switched Off", "Invalid Number", "Not Interested"]
+
+        calls_connected = len(date_calls_df[date_calls_df['call_status'].isin(connected_statuses)])
+        calls_callback = len(date_calls_df[date_calls_df['call_status'].isin(callback_statuses)])
+        calls_unreachable = len(date_calls_df[date_calls_df['call_status'].isin(unreachable_statuses)])
+
+        # KPI Metrics Cards
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric(f"📞 Calls Logged ({sel_date_str})", f"{total_calls}", help="Calls logged on selected date")
+        k2.metric("🟢 Connected / Interested", f"{calls_connected}", delta=f"{round(calls_connected/total_calls*100)}%" if total_calls else "0%")
+        k3.metric("🟡 Callback / Busy", f"{calls_callback}", delta=f"{round(calls_callback/total_calls*100)}%" if total_calls else "0%")
+        k4.metric("🔴 Not Picked / Unreachable", f"{calls_unreachable}", delta=f"{round(calls_unreachable/total_calls*100)}%" if total_calls else "0%", delta_color="inverse")
+        
+        st.markdown("---")
+        
+        # Detailed Call Activity Table for Selected Date
+        st.markdown(f"#### 📋 Detailed Call Log ({sel_date_str})")
+        if not date_calls_df.empty:
+            show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in date_calls_df.columns]
+            st.dataframe(date_calls_df[show_cols], use_container_width=True)
+            
+            # Export
+            excel_tele = to_excel_download(date_calls_df[show_cols], sheet_name="Telecalling_Log")
+            st.download_button("📥 Export Selected Date Call Log (Excel)", data=excel_tele, file_name=f"Telecalling_Log_{sel_date_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
+        else:
+            st.info(f"ℹ️ No calls logged on {sel_date_str} yet. Telecalling updates made today will appear here in real-time.")
+            
+        st.markdown("---")
+        st.markdown("#### 📜 All-Time Telecalling Summary")
+        st.caption(f"Total Call Records Logged Across All Dates: **{total_all_calls}**")
+        all_status_counts = interactions_df['call_status'].value_counts().reset_index()
+        all_status_counts.columns = ['Call Status', 'Total Customers']
+        st.dataframe(all_status_counts, use_container_width=True)
+    else:
+        st.info("ℹ️ No telecalling interactions recorded yet. As agents update call statuses, metrics will appear here.")
 
 
 def render_batch_comparison(conn):
@@ -3148,8 +3208,9 @@ else:
 is_admin = st.session_state.get('admin_unlocked', False)
 
 
-tab_dash, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
+tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
     "📊 Main Dashboard & Telecalling CRM",
+    "📞 Today's Telecalling Performance",
     "⚔️ Compare 2 Batches Studio",
     "📜 Outreach & Dispatch History",
     "📝 Outreach Templates Manager",
@@ -3164,6 +3225,9 @@ with tab_dash:
         render_dashboard(hist_df, "dash_master")
     else:
         st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
+
+with tab_tele:
+    render_telecalling_analytics(conn)
 
 with tab_comp:
     render_batch_comparison(conn)
