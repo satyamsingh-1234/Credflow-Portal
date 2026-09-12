@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import sqlite3
 import os
 import re
@@ -1309,24 +1309,24 @@ def prepare_eval_df(df_sales):
         batch = str(row.get('Upload_Batch', ''))
         
         if 'July' in batch or 'july' in batch:
-            return datetime.date(2026, 7, 15)
+            return date(2026, 7, 15)
         if 'Aug' in batch or 'aug' in batch or 'usage_seet' in batch:
-            return datetime.date(2026, 8, 15)
+            return date(2026, 8, 15)
             
         m = re.search(r'(\d{2})(\d{2})(\d{4})', batch)
         if m:
             day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
             if 1 <= month <= 12 and 1 <= day <= 31:
                 try:
-                    return datetime.date(year, month, day)
+                    return date(year, month, day)
                 except Exception:
                     pass
                     
         if 'Sep' in batch or 'sep' in batch or '092026' in batch:
-            return datetime.date(2026, 9, 15)
+            return date(2026, 9, 15)
         elif 'Oct' in batch or 'oct' in batch or '102026' in batch:
-            return datetime.date(2026, 10, 15)
-        return datetime.date(2026, 9, 15)
+            return date(2026, 10, 15)
+        return date(2026, 9, 15)
 
     import datetime
     eval_df['row_eff_dt'] = eval_df.apply(_calc_row_eff_dt, axis=1)
@@ -1386,8 +1386,8 @@ def render_dashboard(df_sales, prefix):
     custom_start_end = None
     if "Custom Date Range" in date_preset:
         import datetime
-        today_d = datetime.date.today()
-        default_start = datetime.date(2026, 7, 1)
+        today_d = date.today()
+        default_start = date(2026, 7, 1)
         c_input = st.date_input(
             "🗓️ **Select Custom Date Range (Start Date to End Date):**",
             value=(default_start, today_d),
@@ -1421,7 +1421,7 @@ def render_dashboard(df_sales, prefix):
 
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         import datetime
-        today_d = datetime.date.today()
+        today_d = date.today()
 
         if "July" in date_preset:
             if 'Upload_Batch' in eval_df.columns:
@@ -1727,7 +1727,7 @@ def render_crm(cx_df):
             sel_cx_str = st.selectbox("👤 Select Customer", options=cx_options if cx_options else ["No Customers Loaded"], key="cb_cx_select")
         with cb_col2:
             import datetime
-            cb_date = st.date_input("📅 Callback Date", value=datetime.date.today(), key="cb_date_input")
+            cb_date = st.date_input("📅 Callback Date", value=date.today(), key="cb_date_input")
         with cb_col3:
             cb_time_str = st.text_input("⏰ Callback Time", value="4:00 PM", key="cb_time_input")
         with cb_col4:
@@ -1924,7 +1924,7 @@ def render_crm(cx_df):
         custom_date_range = None
         if date_filter == "Custom Date Range 📆":
             import datetime
-            today_d = datetime.date.today()
+            today_d = date.today()
             custom_date_range = st.date_input("🗓️ Select Date Range (Start & End)", value=(today_d, today_d + datetime.timedelta(days=7)), key="flt_custom_dates")
 
         if wa_filter == "Not Sent ❌" or free_wa_filter == "Not Sent ❌" or em_filter == "Not Sent ❌":
@@ -1947,7 +1947,7 @@ def render_crm(cx_df):
 
         # --- Date Filter Logic ---
         import datetime
-        today_val = datetime.date.today()
+        today_val = date.today()
         tomorrow_val = today_val + datetime.timedelta(days=1)
         f_dates = pd.to_datetime(ui_df['Follow-up Date'], errors='coerce').dt.date
 
@@ -2254,7 +2254,7 @@ def render_telecalling_analytics(conn):
     st.info("💡 **Date-Wise Telecalling Performance Tracker**: Real-time monitoring of calls made, connected status, callbacks requested, and unreachable attempts logged starting from **September 2nd, 2026** onwards.")
     
     today_d = datetime.now().date()
-    sept2_d = datetime.date(2026, 9, 2)
+    sept2_d = date(2026, 9, 2)
     today_str = today_d.strftime("%Y-%m-%d")
     
     col_date, col_space = st.columns([3, 1])
@@ -2908,7 +2908,7 @@ def render_batch_comparison(conn):
 
 def render_outreach_history(conn):
     import pandas as pd
-    from datetime import datetime
+    from datetime import datetime, date, timedelta
 
     st.markdown("""
     <div style="background: #FFFFFF; padding: 18px 22px; border-radius: 12px; border: 1px solid #E2E8F0; border-top: 4px solid #2563EB; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
@@ -3043,7 +3043,7 @@ def render_outreach_history(conn):
 
 def render_template_manager(conn):
     import streamlit.components.v1 as components
-    from datetime import datetime
+    from datetime import datetime, date, timedelta
 
     st.markdown("""
     <div style="background: #FFFFFF; padding: 18px 22px; border-radius: 12px; border: 1px solid #E2E8F0; border-top: 4px solid #10B981; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
@@ -3470,7 +3470,7 @@ with tab_upload:
 
                         if not out_df.empty:
                             # Ensure output columns match sqlite schema
-                            batch_name = uploaded_file.name + "_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                            batch_name = uploaded_file.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
                             out_df['Upload_Batch'] = batch_name
 
                             out_df = out_df.astype(str)
