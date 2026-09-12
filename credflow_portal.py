@@ -1936,7 +1936,7 @@ def render_crm(cx_df):
         custom_date_range = None
         if date_filter == "Custom Date Range 📆":
             today_d = date.today()
-            custom_date_range = st.date_input("🗓️ Select Date Range (Start & End)", value=(today_d, today_d + datetime.timedelta(days=7)), key="flt_custom_dates")
+            custom_date_range = st.date_input("🗓️ Select Date Range (Start & End)", value=(today_d, today_d + timedelta(days=7)), key="flt_custom_dates")
 
         if wa_filter == "Not Sent ❌" or free_wa_filter == "Not Sent ❌" or em_filter == "Not Sent ❌":
             st.caption("💡 **Filter Active Note**: Jab aap किसी customer ko table mein 'Sent ✅' (WA/Email) mark karenge ya Bulk Send karenge, toh wo automatic 'Not Sent ❌' list se nikal kar 'Sent ✅' category mein move ho jayenge.")
@@ -1958,7 +1958,7 @@ def render_crm(cx_df):
 
         # --- Date Filter Logic ---
         today_val = date.today()
-        tomorrow_val = today_val + datetime.timedelta(days=1)
+        tomorrow_val = today_val + timedelta(days=1)
         f_dates = pd.to_datetime(ui_df['Follow-up Date'], errors='coerce').dt.date
 
         if date_filter == "Today 📌":
