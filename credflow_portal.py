@@ -3230,7 +3230,7 @@ with tab_tpl:
 
 with tab_upload:
     if not is_admin:
-        st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar and enter the password (`credflow2026`) to unlock these features.")
+        st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
     else:
         action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
 
