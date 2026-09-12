@@ -617,96 +617,9 @@ st.markdown("""
     }
 
     /* Alert Boxes */
-    /* ── MAZEDAAR & FUTURISTIC RELOAD LOADING ANIMATION ── */
-    
-    /* 1. Neon Glowing Laser Top Loading Bar */
-    #stDecoration {
-        background: linear-gradient(90deg, #3B82F6, #10B981, #EC4899, #8B5CF6, #3B82F6) !important;
-        background-size: 200% 100% !important;
-        height: 5px !important;
-        box-shadow: 0 2px 10px rgba(59, 130, 246, 0.6) !important;
-        animation: laserBeam 1.5s linear infinite !important;
-    }
-
-    @keyframes laserBeam {
-        0% { background-position: 0% 0%; }
-        100% { background-position: 200% 0%; }
-    }
-
-    /* 2. Super Cool Floating Glassmorphism Spinner Container */
-    .stSpinner {
-        background: rgba(15, 23, 42, 0.85) !important;
-        backdrop-filter: blur(12px) !important;
-        -webkit-backdrop-filter: blur(12px) !important;
-        border: 1px solid rgba(56, 189, 248, 0.4) !important;
-        border-radius: 16px !important;
-        padding: 16px 24px !important;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 0 20px rgba(56, 189, 248, 0.3) !important;
-        color: #F8FAFC !important;
-        font-weight: 700 !important;
-        font-size: 15px !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 14px !important;
-        animation: floatPulse 1.8s ease-in-out infinite !important;
-        margin: 12px 0 !important;
-    }
-
-    @keyframes floatPulse {
-        0% { transform: translateY(0px); box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 0 15px rgba(56,189,248,0.2); }
-        50% { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(0,0,0,0.3), 0 0 25px rgba(56,189,248,0.5); }
-        100% { transform: translateY(0px); box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 0 15px rgba(56,189,248,0.2); }
-    }
-
-    /* 3. Futuristic Rotating Cyber Loader Icon inside stSpinner */
-    .stSpinner > div {
-        width: 32px !important;
-        height: 32px !important;
-        border: 3.5px solid transparent !important;
-        border-top-color: #38BDF8 !important;
-        border-right-color: #34D399 !important;
-        border-bottom-color: #F472B6 !important;
-        border-left-color: #A78BFA !important;
-        border-radius: 50% !important;
-        animation: cyberSpin 0.7s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite !important;
-        filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8)) !important;
-    }
-
-    @keyframes cyberSpin {
-        0% { transform: rotate(0deg) scale(0.95); }
-        50% { transform: rotate(180deg) scale(1.1); }
-        100% { transform: rotate(360deg) scale(0.95); }
-    }
-
-    /* 4. High-Tech Shimmering Skeleton Cards */
-    [data-testid="stSkeleton"] {
-        background: linear-gradient(90deg, #CBD5E1 25%, #F1F5F9 50%, #CBD5E1 75%) !important;
-        background-size: 200% 100% !important;
-        animation: cyberSkeleton 1.2s infinite !important;
-        border-radius: 12px !important;
-    }
-
-    @keyframes cyberSkeleton {
-        0% { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
-    }
-
-    /* 5. Smooth Page Entrance / Refresh Bounce Fade-In */
-    .stApp main {
-        animation: appEntrance 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-
-    /* 6. Neon Glow & Pulse on Top Header Running Man Icon */
-    header [data-testid="stHeader"] img,
-    header [data-testid="stHeader"] svg {
-        filter: drop-shadow(0 0 6px #2563EB) invert(15%) sepia(90%) saturate(2000%) hue-rotate(210deg) !important;
-        animation: neonPulse 1s infinite ease-in-out !important;
-    }
-
-    @keyframes neonPulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.3); filter: drop-shadow(0 0 10px #10B981); }
-        100% { transform: scale(1); }
+    div[data-testid="stAlert"] {
+        border-radius: 10px !important;
+        border: 1px solid rgba(0, 0, 0, 0.05) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -3300,30 +3213,25 @@ tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 ])
 
 with tab_dash:
-    with st.spinner("⚡ Processing & Loading CredFlow Dashboard..."):
-        import pandas as pd
-        s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
-        if not s_batches.empty:
-            hist_df = fetch_all_history()
-            render_dashboard(hist_df, "dash_master")
-        else:
-            st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
+    import pandas as pd
+    s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+    if not s_batches.empty:
+        hist_df = fetch_all_history()
+        render_dashboard(hist_df, "dash_master")
+    else:
+        st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
 
 with tab_tele:
-    with st.spinner("📞 Loading Telecalling Performance & Analytics..."):
-        render_telecalling_analytics(conn)
+    render_telecalling_analytics(conn)
 
 with tab_comp:
-    with st.spinner("⚔️ Calculating Batch Comparison Metrics..."):
-        render_batch_comparison(conn)
+    render_batch_comparison(conn)
 
 with tab_hist:
-    with st.spinner("📜 Fetching Outreach & Dispatch Logs..."):
-        render_outreach_history(conn)
+    render_outreach_history(conn)
 
 with tab_tpl:
-    with st.spinner("📝 Loading Outreach Templates Manager..."):
-        render_template_manager(conn)
+    render_template_manager(conn)
 
 with tab_upload:
     if not is_admin:
