@@ -10,9 +10,13 @@ import os
 import re
 import urllib.parse
 
+logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
+if not os.path.exists(logo_path):
+    logo_path = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_ppt\credflow_logo.png"
+
 st.set_page_config(
     page_title="CredFlow | Customer Adoption & Credit Analytics Portal",
-    page_icon="🚀",
+    page_icon=logo_path if os.path.exists(logo_path) else "⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
