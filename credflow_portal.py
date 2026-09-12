@@ -2243,7 +2243,7 @@ def render_crm(cx_df):
                         if succ_mail:
                             st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
 
-                now_call_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if c else ""
+                now_call_at = datetime.now().strftime("%Y-%m-%d") if c else ""
 
                 conn.execute('''
                     INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, extra_credits, last_call_at)
@@ -2357,9 +2357,12 @@ def render_telecalling_analytics(conn):
         st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
         if not date_calls_df.empty:
             show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in date_calls_df.columns]
-            st.dataframe(date_calls_df[show_cols], use_container_width=True)
+            date_calls_display = date_calls_df[show_cols].copy()
+            if 'last_call_at' in date_calls_display.columns:
+                date_calls_display['last_call_at'] = pd.to_datetime(date_calls_display['last_call_at'], errors='coerce').dt.strftime('%Y-%m-%d').fillna(date_calls_display['last_call_at'])
+            st.dataframe(date_calls_display, use_container_width=True)
             
-            excel_tele = to_excel_download(date_calls_df[show_cols], sheet_name="Telecalling_Log")
+            excel_tele = to_excel_download(date_calls_display, sheet_name="Telecalling_Log")
             st.download_button("📥 Export Selected Date Call Log (Excel)", data=excel_tele, file_name=f"Telecalling_Log_{sel_date_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
         else:
             st.info(f"ℹ️ No calls logged on {selected_date.strftime('%d %b %Y')} yet. Select another date above to view past call logs.")
