@@ -3118,8 +3118,7 @@ if not os.path.exists(logo_path):
     logo_path = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_ppt\credflow_logo.png"
 
 if os.path.exists(logo_path):
-    st.sidebar.image(logo_path, use_container_width=True)
-    st.image(logo_path, width=220)
+    st.sidebar.image(logo_path, width=180)
 
 
 # ── SIDEBAR ACCESS CONTROL (ADMIN VS VIEW-ONLY) ──
