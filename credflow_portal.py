@@ -22,11 +22,14 @@ LOCAL_DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflo
 if os.path.exists(LOCAL_DB_PATH):
     DB_PATH = LOCAL_DB_PATH
 else:
-    DB_PATH = os.path.join(os.path.dirname(__file__), "credflow_history.db")
+    DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
 
 conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
-conn.execute('PRAGMA journal_mode=WAL;')
-conn.execute('PRAGMA busy_timeout=30000;')
+try:
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA busy_timeout=30000;')
+except Exception:
+    pass
 
 conn.execute('''CREATE TABLE IF NOT EXISTS customer_interactions (
     phone TEXT PRIMARY KEY,
