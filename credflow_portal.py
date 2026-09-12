@@ -1549,13 +1549,24 @@ def render_dashboard(df_sales, prefix):
     </div>
     """, unsafe_allow_html=True)
 
+    # Outreach stats from DB
+    interactions_dash = pd.read_sql("SELECT * FROM customer_interactions", conn)
+    interactions_dash['phone'] = interactions_dash['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+    interactions_dash = interactions_dash.drop_duplicates(subset=['phone'], keep='last')
+
+    filtered_export = filtered.copy()
+    if 'phone' in filtered_export.columns:
+        filtered_export['merge_phone'] = filtered_export['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        inter_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in interactions_dash.columns]
+        filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_db'))
+
     # ── OVERALL DASHBOARD ──────────────────────────────────────────────
     st.markdown("---")
     d_c1, d_c2 = st.columns([3, 1])
     with d_c1:
         st.subheader("📊 Overall Dashboard")
     with d_c2:
-        excel_dash = to_excel_download(filtered, sheet_name="Dashboard Data")
+        excel_dash = to_excel_download(filtered_export, sheet_name="Dashboard Data")
         st.download_button("📥 Export Filtered Data", data=excel_dash, file_name="Dashboard_Filtered_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
     # Compute per-customer stats from eval_df (one row per phone)
@@ -1567,15 +1578,10 @@ def render_dashboard(df_sales, prefix):
     proper_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
     no_data = unique_cx - no_usage - low_usage - proper_usage
 
-    # Outreach stats from DB
-    interactions_dash = pd.read_sql("SELECT * FROM customer_interactions", conn)
-    interactions_dash['phone'] = interactions_dash['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    interactions_dash = interactions_dash.drop_duplicates(subset=['phone'], keep='last')
-
     dash_df['merge_phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     dash_merged = pd.merge(dash_df, interactions_dash, left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_db'))
 
-    wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum())
+    wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
     free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
     email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
 
@@ -1942,10 +1948,11 @@ def render_crm(cx_df):
             'remarks': 'Remarks',
             'follow_up': 'Follow-up Date',
             'issue_type': 'Issue Type',
-            'plan_of_action': 'Plan of Action'
+            'plan_of_action': 'Plan of Action',
+            'last_call_at': 'Last Call Date'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Follow-up Date']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Follow-up Date', 'Last Call Date']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -2121,7 +2128,8 @@ def render_crm(cx_df):
                     width="medium"
                 ),
                 "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
-                "Follow-up Date": st.column_config.DateColumn("Follow-up Date 📅", format="DD/MM/YYYY")
+                "Follow-up Date": st.column_config.DateColumn("Follow-up Date 📅", format="DD/MM/YYYY"),
+                "Last Call Date": st.column_config.TextColumn("Last Call Date 📞", disabled=True)
             },
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
