@@ -2250,19 +2250,27 @@ def render_crm(cx_df):
                 ''', (p, w, fw, e, c, su, it, poa, r, f, ec, now_call_at))
             conn.commit()
 def render_telecalling_analytics(conn):
-    st.markdown("### 📞 Today's Telecalling Analytics & Performance")
-    st.info("💡 **Live Telecalling Performance Tracker**: Real-time monitoring of calls made, connected status, callbacks requested, and unreachable attempts logged by the support team.")
+    st.markdown("### 📞 Telecalling Analytics & Performance (Sept 2 - Today)")
+    st.info("💡 **Date-Wise Telecalling Performance Tracker**: Real-time monitoring of calls made, connected status, callbacks requested, and unreachable attempts logged starting from **September 2nd, 2026** onwards.")
     
-    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_d = datetime.now().date()
+    sept2_d = datetime.date(2026, 9, 2)
+    today_str = today_d.strftime("%Y-%m-%d")
     
     col_date, col_space = st.columns([3, 1])
     with col_date:
-        selected_date = st.date_input("🗓️ Select Date to View Call Metrics", value=datetime.now().date(), key="tele_date_picker")
+        selected_date = st.date_input(
+            "🗓️ Select Specific Date to Inspect / Edit Calls",
+            value=today_d,
+            min_value=sept2_d,
+            max_value=today_d,
+            key="tele_date_picker"
+        )
     
     sel_date_str = selected_date.strftime("%Y-%m-%d")
     sel_date_dmy = selected_date.strftime("%d/%m/%Y")
     
-    # Query customer interactions where EITHER call_status, remarks, or follow_up is filled
+    # Query customer interactions
     interactions_df = pd.read_sql("""
         SELECT * FROM customer_interactions 
         WHERE (call_status IS NOT NULL AND call_status != '')
@@ -2271,19 +2279,30 @@ def render_telecalling_analytics(conn):
     """, conn)
     
     if not interactions_df.empty:
-        # Match by last_call_at OR follow_up date (e.g. 12/09/2026 or 2026-09-12)
-        date_calls_mask = (
-            interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str) |
-            interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_str) |
-            interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_dmy)
-        )
+        # Extract robust call date for grouping
+        def _parse_call_date(row):
+            l_at = str(row.get('last_call_at', '')).strip()
+            if len(l_at) >= 10:
+                p_dt = pd.to_datetime(l_at[:10], errors='coerce')
+                if pd.notna(p_dt): return p_dt.date()
+            f_up = str(row.get('follow_up', '')).strip()
+            if f_up and f_up.lower() not in ['none', 'nat', 'nan', '']:
+                p_dt = pd.to_datetime(f_up, errors='coerce', dayfirst=True)
+                if pd.notna(p_dt): return p_dt.date()
+            return today_d
+
+        interactions_df['parsed_call_date'] = interactions_df.apply(_parse_call_date, axis=1)
         
-        if date_calls_mask.any():
-            date_calls_df = interactions_df[date_calls_mask]
-        elif sel_date_str == today_str:
+        # ── 1. SELECTED DATE METRICS ──
+        date_calls_df = interactions_df[
+            (interactions_df['parsed_call_date'] == selected_date) |
+            (interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str)) |
+            (interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_str)) |
+            (interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_dmy))
+        ]
+        
+        if date_calls_df.empty and selected_date == today_d:
             date_calls_df = interactions_df
-        else:
-            date_calls_df = interactions_df[date_calls_mask]
             
         total_calls = len(date_calls_df)
         total_all_calls = len(interactions_df)
@@ -2296,33 +2315,70 @@ def render_telecalling_analytics(conn):
         calls_callback = len(date_calls_df[date_calls_df['call_status'].isin(callback_statuses)])
         calls_unreachable = len(date_calls_df[date_calls_df['call_status'].isin(unreachable_statuses)])
 
-        # KPI Metrics Cards
+        # KPI Metrics Cards for Selected Date
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric(f"📞 Calls Logged ({sel_date_str})", f"{total_calls}", help="Calls logged on selected date")
+        k1.metric(f"📞 Calls Logged ({selected_date.strftime('%d %b %Y')})", f"{total_calls}", help="Calls logged on selected date")
         k2.metric("🟢 Connected / Interested", f"{calls_connected}", delta=f"{round(calls_connected/total_calls*100)}%" if total_calls else "0%")
         k3.metric("🟡 Callback / Busy", f"{calls_callback}", delta=f"{round(calls_callback/total_calls*100)}%" if total_calls else "0%")
         k4.metric("🔴 Not Picked / Unreachable", f"{calls_unreachable}", delta=f"{round(calls_unreachable/total_calls*100)}%" if total_calls else "0%", delta_color="inverse")
         
         st.markdown("---")
         
-        # Detailed Call Activity Table for Selected Date
-        st.markdown(f"#### 📋 Detailed Call Log ({sel_date_str})")
+        # ── 2. DATE-WISE BREAKDOWN SUMMARY (Sept 2nd Onwards) ──
+        st.markdown("#### 📅 Date-Wise Call Performance Summary (Sept 2 - Today)")
+        
+        # Filter dataframe for Sept 2nd onwards
+        sept_df = interactions_df[interactions_df['parsed_call_date'] >= sept2_d].copy()
+        
+        if not sept_df.empty:
+            def _get_call_category(status):
+                st_str = str(status).strip()
+                if st_str in connected_statuses: return "🟢 Connected"
+                if st_str in callback_statuses: return "🟡 Callback"
+                if st_str in unreachable_statuses: return "🔴 Unreachable"
+                return "⚪ Other/Logged"
+
+            sept_df['Call Category'] = sept_df['call_status'].apply(_get_call_category)
+            
+            # Daily Groupby
+            daily_summary = sept_df.groupby(['parsed_call_date', 'Call Category']).size().unstack(fill_value=0).reset_index()
+            daily_summary.rename(columns={'parsed_call_date': 'Call Date'}, inplace=True)
+            daily_summary['Total Calls'] = daily_summary.select_dtypes(include='number').sum(axis=1)
+            daily_summary.sort_values(by='Call Date', ascending=False, inplace=True)
+            
+            d_c1, d_c2 = st.columns([1.5, 1])
+            with d_c1:
+                # Daily Bar Chart
+                fig_daily = px.bar(
+                    sept_df.groupby(['parsed_call_date', 'Call Category']).size().reset_index(name='Count'),
+                    x='parsed_call_date', y='Count', color='Call Category',
+                    title="Daily Telecalling Volume Trend (Sept 2 Onwards)",
+                    color_discrete_map={
+                        '🟢 Connected': '#10B981',
+                        '🟡 Callback': '#F59E0B',
+                        '🔴 Unreachable': '#EF4444',
+                        '⚪ Other/Logged': '#9CA3AF'
+                    },
+                    barmode='stack'
+                )
+                fig_daily.update_layout(height=320, xaxis_title="Call Date", yaxis_title="Number of Calls", margin=dict(t=40, b=20, l=20, r=20))
+                st.plotly_chart(fig_daily, use_container_width=True)
+                
+            with d_c2:
+                st.dataframe(daily_summary, use_container_width=True)
+                
+        st.markdown("---")
+        
+        # ── 3. DETAILED LOG FOR SELECTED DATE ──
+        st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
         if not date_calls_df.empty:
             show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in date_calls_df.columns]
             st.dataframe(date_calls_df[show_cols], use_container_width=True)
             
-            # Export
             excel_tele = to_excel_download(date_calls_df[show_cols], sheet_name="Telecalling_Log")
             st.download_button("📥 Export Selected Date Call Log (Excel)", data=excel_tele, file_name=f"Telecalling_Log_{sel_date_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
         else:
-            st.info(f"ℹ️ No calls logged on {sel_date_str} yet. Telecalling updates made today will appear here in real-time.")
-            
-        st.markdown("---")
-        st.markdown("#### 📜 All-Time Telecalling Summary")
-        st.caption(f"Total Call Records Logged Across All Dates: **{total_all_calls}**")
-        all_status_counts = interactions_df['call_status'].value_counts().reset_index()
-        all_status_counts.columns = ['Call Status', 'Total Customers']
-        st.dataframe(all_status_counts, use_container_width=True)
+            st.info(f"ℹ️ No calls logged on {sel_date_str} yet. Select another date or update call status in main dashboard.")
     else:
         st.info("ℹ️ No telecalling interactions recorded yet. As agents update call statuses, metrics will appear here.")
 
