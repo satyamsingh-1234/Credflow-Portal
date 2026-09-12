@@ -1422,39 +1422,6 @@ def render_dashboard(df_sales, prefix):
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         import datetime
         today_d = datetime.date.today()
-        
-        # Calculate robust effective date for every row (Plan Stat Date fallback to Batch Cohort Date)
-        eval_df['parsed_plan_dt'] = pd.to_datetime(eval_df['Plan Stat Date'], errors='coerce', dayfirst=True)
-        
-        def calc_row_eff_dt(row):
-            p_dt = row['parsed_plan_dt']
-            if pd.notna(p_dt):
-                return p_dt.date()
-            batch = str(row.get('Upload_Batch', ''))
-            
-            if 'July' in batch or 'july' in batch:
-                return datetime.date(2026, 7, 15)
-            if 'Aug' in batch or 'aug' in batch or 'usage_seet' in batch:
-                return datetime.date(2026, 8, 15)
-                
-            m = re.search(r'(\d{2})(\d{2})(\d{4})', batch)
-            if m:
-                day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
-                if 1 <= month <= 12 and 1 <= day <= 31:
-                    try:
-                        return datetime.date(year, month, day)
-                    except Exception:
-                        pass
-                        
-            if 'Sep' in batch or 'sep' in batch or '092026' in batch:
-                return datetime.date(2026, 9, 15)
-            elif 'Oct' in batch or 'oct' in batch or '102026' in batch:
-                return datetime.date(2026, 10, 15)
-            return datetime.date(2026, 9, 15)
-
-        eval_df['row_eff_dt'] = eval_df.apply(calc_row_eff_dt, axis=1)
-        cust_dt_map = eval_df.groupby('phone')['row_eff_dt'].min().to_dict()
-        eval_df['effective_date'] = eval_df['phone'].map(cust_dt_map)
 
         if "July" in date_preset:
             if 'Upload_Batch' in eval_df.columns:
