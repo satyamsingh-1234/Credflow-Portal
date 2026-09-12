@@ -1919,9 +1919,20 @@ def render_crm(cx_df):
         if 'email_sent' not in call_df.columns:
             call_df['email_sent'] = 0
         call_df['email_sent'] = call_df['email_sent'].fillna(0).astype(bool)
-        call_df['call_status'] = call_df['call_status'].fillna("")
-        call_df['remarks'] = call_df['remarks'].fillna("")
-        call_df['follow_up'] = pd.to_datetime(call_df['follow_up'], errors='coerce').dt.date
+        def _parse_crm_call_date(row):
+            l_at = str(row.get('last_call_at', '')).strip()
+            if not l_at or l_at in ['None', 'nan', 'NaT']:
+                l_at = str(row.get('follow_up', '')).strip()
+            if len(l_at) >= 10:
+                if l_at[4] == '-' and l_at[7] == '-':
+                    p_dt = pd.to_datetime(l_at[:10], errors='coerce', format='%Y-%m-%d')
+                    if pd.notna(p_dt): return p_dt.date()
+                else:
+                    p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
+                    if pd.notna(p_dt): return p_dt.date()
+            return None
+
+        call_df['Call Date'] = call_df.apply(_parse_crm_call_date, axis=1)
         
         # --- Credits Logic ---
         if 'extra_credits' not in call_df.columns:
@@ -1953,7 +1964,6 @@ def render_crm(cx_df):
             'status_update': 'Status Update',
             'call_status': 'Call Status',
             'remarks': 'Remarks',
-            'follow_up': 'Call Date',
             'issue_type': 'Issue Type',
             'plan_of_action': 'Plan of Action'
         })
@@ -2651,29 +2661,41 @@ def render_batch_comparison(conn):
         interactions_comp['phone'] = interactions_comp['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         interactions_comp = interactions_comp.drop_duplicates(subset=['phone'], keep='last')
         merged['merge_phone'] = merged['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-        db_cols_comp = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
+        db_cols_comp = ['call_status', 'remarks', 'follow_up', 'last_call_at', 'issue_type', 'plan_of_action', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
         merged = merged.drop(columns=[c for c in db_cols_comp if c in merged.columns], errors='ignore')
-        int_cols = ['phone', 'call_status', 'issue_type', 'remarks', 'follow_up', 'plan_of_action']
+        int_cols = ['phone', 'call_status', 'issue_type', 'remarks', 'follow_up', 'last_call_at', 'plan_of_action']
         int_cols = [c for c in int_cols if c in interactions_comp.columns]
         merged = pd.merge(merged, interactions_comp[int_cols], left_on='merge_phone', right_on='phone', how='left')
     else:
         merged['call_status'] = ""
         merged['issue_type'] = ""
         merged['remarks'] = ""
-        merged['follow_up'] = ""
 
     merged['call_status'] = merged['call_status'].fillna("")
     if 'issue_type' not in merged.columns:
         merged['issue_type'] = ""
     merged['issue_type'] = merged['issue_type'].fillna("")
     merged['remarks'] = merged['remarks'].fillna("")
-    merged['follow_up'] = pd.to_datetime(merged['follow_up'], errors='coerce').dt.date
+    
+    def _parse_comp_call_date(row):
+        l_at = str(row.get('last_call_at', '')).strip()
+        if not l_at or l_at in ['None', 'nan', 'NaT']:
+            l_at = str(row.get('follow_up', '')).strip()
+        if len(l_at) >= 10:
+            if l_at[4] == '-' and l_at[7] == '-':
+                p_dt = pd.to_datetime(l_at[:10], errors='coerce', format='%Y-%m-%d')
+                if pd.notna(p_dt): return p_dt.date()
+            else:
+                p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
+                if pd.notna(p_dt): return p_dt.date()
+        return None
+
+    merged['Call Date'] = merged.apply(_parse_comp_call_date, axis=1)
 
     merged = merged.rename(columns={
         'call_status': 'Call Status',
         'issue_type': 'Issue Type',
-        'remarks': 'Remarks',
-        'follow_up': 'Call Date'
+        'remarks': 'Remarks'
     })
 
     def _get_health_rank(h_str):
