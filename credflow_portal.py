@@ -2260,16 +2260,30 @@ def render_telecalling_analytics(conn):
         selected_date = st.date_input("🗓️ Select Date to View Call Metrics", value=datetime.now().date(), key="tele_date_picker")
     
     sel_date_str = selected_date.strftime("%Y-%m-%d")
+    sel_date_dmy = selected_date.strftime("%d/%m/%Y")
     
-    # Query customer interactions
-    interactions_df = pd.read_sql("SELECT * FROM customer_interactions WHERE call_status IS NOT NULL AND call_status != ''", conn)
+    # Query customer interactions where EITHER call_status, remarks, or follow_up is filled
+    interactions_df = pd.read_sql("""
+        SELECT * FROM customer_interactions 
+        WHERE (call_status IS NOT NULL AND call_status != '')
+           OR (remarks IS NOT NULL AND remarks != '')
+           OR (follow_up IS NOT NULL AND follow_up != '')
+    """, conn)
     
     if not interactions_df.empty:
-        # Filter for selected date
-        if 'last_call_at' in interactions_df.columns:
-            date_calls_df = interactions_df[interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str)]
-        else:
+        # Match by last_call_at OR follow_up date (e.g. 12/09/2026 or 2026-09-12)
+        date_calls_mask = (
+            interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str) |
+            interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_str) |
+            interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_dmy)
+        )
+        
+        if date_calls_mask.any():
+            date_calls_df = interactions_df[date_calls_mask]
+        elif sel_date_str == today_str:
             date_calls_df = interactions_df
+        else:
+            date_calls_df = interactions_df[date_calls_mask]
             
         total_calls = len(date_calls_df)
         total_all_calls = len(interactions_df)
