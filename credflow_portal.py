@@ -1951,7 +1951,7 @@ def render_crm(cx_df):
             'plan_of_action': 'Plan of Action'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -2416,7 +2416,7 @@ def render_telecalling_analytics(conn):
             # ── 3. DETAILED LOG FOR SELECTED DATE ──
             st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
             if not date_calls_df.empty:
-                show_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in date_calls_df.columns]
+                show_cols = [c for c in ['phone', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in date_calls_df.columns]
                 date_calls_display = date_calls_df[show_cols].copy()
                 if 'last_call_at' in date_calls_display.columns:
                     date_calls_display['last_call_at'] = pd.to_datetime(date_calls_display['last_call_at'], errors='coerce').dt.strftime('%Y-%m-%d').fillna(date_calls_display['last_call_at'])
@@ -2438,26 +2438,24 @@ def render_telecalling_analytics(conn):
         
         if not fu_df.empty:
             fu_df['parsed_fu_date'] = pd.to_datetime(fu_df['follow_up'], errors='coerce', dayfirst=True).dt.date
-            valid_fu = fu_df[fu_df['parsed_fu_date'].notna()].copy()
             
+            tot_fu = len(fu_df)
+            today_fu = len(fu_df[fu_df['parsed_fu_date'] == today_d])
+            upc_fu = len(fu_df[fu_df['parsed_fu_date'] > today_d])
+            
+            fc1, fc2, fc3 = st.columns(3)
+            fc1.metric("⏰ Total Scheduled Follow-ups", f"{tot_fu}")
+            fc2.metric("🟡 Today's Follow-ups Due", f"{today_fu}")
+            fc3.metric("🟢 Upcoming Follow-ups", f"{upc_fu}")
+            
+            st.markdown("---")
+            
+            valid_fu = fu_df[fu_df['parsed_fu_date'].notna()].copy()
             if not valid_fu.empty:
-                tot_fu = len(valid_fu)
-                today_fu = len(valid_fu[valid_fu['parsed_fu_date'] == today_d])
-                upc_fu = len(valid_fu[valid_fu['parsed_fu_date'] > today_d])
-                overdue_fu = len(valid_fu[valid_fu['parsed_fu_date'] < today_d])
-                
-                fc1, fc2, fc3, fc4 = st.columns(4)
-                fc1.metric("⏰ Total Scheduled Follow-ups", f"{tot_fu}")
-                fc2.metric("🟡 Today's Follow-ups Due", f"{today_fu}")
-                fc3.metric("🟢 Upcoming Follow-ups", f"{upc_fu}")
-                fc4.metric("🔴 Past / Overdue", f"{overdue_fu}")
-                
-                st.markdown("---")
-                
-                filter_choice = st.selectbox(
+                filter_choice = st.radio(
                     "🔍 Filter Follow-up Reminders",
                     ["Upcoming & Today 🟢", "Today's Due Only 🟡", "Past / Overdue 🔴", "All Follow-ups 📋"],
-                    key="fu_filter_choice"
+                    horizontal=True
                 )
                 
                 if filter_choice == "Upcoming & Today 🟢":
@@ -2469,7 +2467,7 @@ def render_telecalling_analytics(conn):
                 else:
                     filtered_fu = valid_fu.sort_values(by='parsed_fu_date', ascending=False)
                 
-                show_fu_cols = [c for c in ['phone', 'follow_up', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in filtered_fu.columns]
+                show_fu_cols = [c for c in ['phone', 'follow_up', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'last_call_at'] if c in filtered_fu.columns]
                 display_fu = filtered_fu[show_fu_cols].copy()
                 if 'last_call_at' in display_fu.columns:
                     display_fu['last_call_at'] = pd.to_datetime(display_fu['last_call_at'], errors='coerce').dt.strftime('%Y-%m-%d').fillna(display_fu['last_call_at'])
