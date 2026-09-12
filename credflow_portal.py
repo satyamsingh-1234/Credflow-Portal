@@ -1506,31 +1506,6 @@ def render_dashboard(df_sales, prefix):
     not_reached = unique_cx - total_reached
     o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
 
-    # ── ROW 2.5: Today's Telecalling KPIs & Performance ──
-    st.markdown("---")
-    st.markdown("#### 📞 Telecalling Performance & Call Metrics (Today's Activity)")
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    
-    total_calls_logged = len(dash_merged[dash_merged['call_status'].fillna('').astype(str).str.strip() != ''])
-    if 'last_call_at' in dash_merged.columns:
-        today_only_calls = len(dash_merged[dash_merged['last_call_at'].fillna('').astype(str).str.startswith(today_str)])
-    else:
-        today_only_calls = total_calls_logged
-
-    connected_statuses = ["Connected", "Interested", "Converted", "Payment Pending"]
-    callback_statuses = ["Call Later", "Call Back Requested", "Busy", "Ringing"]
-    unreachable_statuses = ["Not Picked", "Switched Off", "Invalid Number", "Not Interested"]
-
-    calls_connected = len(dash_merged[dash_merged['call_status'].isin(connected_statuses)])
-    calls_callback = len(dash_merged[dash_merged['call_status'].isin(callback_statuses)])
-    calls_unreachable = len(dash_merged[dash_merged['call_status'].isin(unreachable_statuses)])
-
-    tc1, tc2, tc3, tc4 = st.columns(4)
-    tc1.metric("📞 Calls Made Today", f"{today_only_calls}", help="Number of customer calls logged/updated today")
-    tc2.metric("🟢 Connected / Interested", f"{calls_connected}", delta=f"{round(calls_connected/total_calls_logged*100)}%" if total_calls_logged else "0%")
-    tc3.metric("🟡 Callback / Busy", f"{calls_callback}", delta=f"{round(calls_callback/total_calls_logged*100)}%" if total_calls_logged else "0%")
-    tc4.metric("🔴 Not Picked / Unreachable", f"{calls_unreachable}", delta=f"{round(calls_unreachable/total_calls_logged*100)}%" if total_calls_logged else "0%", delta_color="inverse")
-
     # ── ROW 3: Charts ──
     ch1, ch2 = st.columns(2)
 
