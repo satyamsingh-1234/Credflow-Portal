@@ -10,6 +10,13 @@ import os
 import re
 import urllib.parse
 
+st.set_page_config(
+    page_title="CredFlow | Customer Adoption & Credit Analytics Portal",
+    page_icon="🚀",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # ── DATABASE SETUP ──
 LOCAL_DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
 if os.path.exists(LOCAL_DB_PATH):
@@ -3100,6 +3107,16 @@ def render_template_manager(conn):
                         conn.commit()
                         st.toast(f"🔄 Reset {label} to default!", icon="🔄")
                         st.rerun()
+
+
+# ── LOGO & HEADER SETUP ──
+logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
+if not os.path.exists(logo_path):
+    logo_path = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_ppt\credflow_logo.png"
+
+if os.path.exists(logo_path):
+    st.sidebar.image(logo_path, use_container_width=True)
+    st.image(logo_path, width=220)
 
 
 # ── SIDEBAR ACCESS CONTROL (ADMIN VS VIEW-ONLY) ──
