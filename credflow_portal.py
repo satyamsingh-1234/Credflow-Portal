@@ -3268,170 +3268,169 @@ with tab_tpl:
         render_template_manager(conn)
 
 with tab_upload:
-    with st.spinner("⚙️ Loading Master Data Management & Upload Controls..."):
-        time.sleep(0.18)
-        if not is_admin:
-            st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
-        else:
+    if not is_admin:
+        st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
+    else:
+        with st.spinner("⚙️ Loading Master Data Management & Upload Controls..."):
+            time.sleep(0.18)
             action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
 
-        if action == "📤 Upload New Master Data":
-            st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
-            uploaded_file = st.file_uploader("📂 Upload Raw Sales Data", type=["csv", "xlsx"])
+            if action == "📤 Upload New Master Data":
+                st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
+                uploaded_file = st.file_uploader("📂 Upload Raw Sales Data", type=["csv", "xlsx"])
 
-            if uploaded_file:
-                file_id = getattr(uploaded_file, 'file_id', uploaded_file.name + str(uploaded_file.size))
+                if uploaded_file:
+                    file_id = getattr(uploaded_file, 'file_id', uploaded_file.name + str(uploaded_file.size))
 
-                if st.session_state.get('last_processed_file_id') != file_id:
-                    try:
-                        import datetime
-                        import pandas as pd
-                        s_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+                    if st.session_state.get('last_processed_file_id') != file_id:
+                        try:
+                            import datetime
+                            import pandas as pd
+                            s_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
 
-                        # Recover missing headers from the raw CSV dump
-                        if 'Unnamed: 33' in s_df.columns: s_df.rename(columns={'Unnamed: 33': 'syncing_status'}, inplace=True)
-                        if 'Unnamed: 34' in s_df.columns: s_df.rename(columns={'Unnamed: 34': 'customer_id'}, inplace=True)
-                        if 'Unnamed: 35' in s_df.columns: s_df.rename(columns={'Unnamed: 35': 'Last Login'}, inplace=True)
-                        if 'Unnamed: 36' in s_df.columns: s_df.rename(columns={'Unnamed: 36': 'Credits used'}, inplace=True)
+                            # Recover missing headers from the raw CSV dump
+                            if 'Unnamed: 33' in s_df.columns: s_df.rename(columns={'Unnamed: 33': 'syncing_status'}, inplace=True)
+                            if 'Unnamed: 34' in s_df.columns: s_df.rename(columns={'Unnamed: 34': 'customer_id'}, inplace=True)
+                            if 'Unnamed: 35' in s_df.columns: s_df.rename(columns={'Unnamed: 35': 'Last Login'}, inplace=True)
+                            if 'Unnamed: 36' in s_df.columns: s_df.rename(columns={'Unnamed: 36': 'Credits used'}, inplace=True)
 
-                        # Remove remaining Unnamed columns
-                        s_df = s_df.loc[:, ~s_df.columns.str.contains('^Unnamed')]
-                        def _get_row_val(r_item, keywords, default=""):
-                            for col in r_item.index:
-                                col_str = str(col).lower().replace('_', ' ').strip()
-                                for kw in keywords:
-                                    if kw.lower() in col_str:
-                                        val = r_item[col]
-                                        if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', '']:
-                                            return str(val).strip()
-                            return default
+                            # Remove remaining Unnamed columns
+                            s_df = s_df.loc[:, ~s_df.columns.str.contains('^Unnamed')]
+                            def _get_row_val(r_item, keywords, default=""):
+                                for col in r_item.index:
+                                    col_str = str(col).lower().replace('_', ' ').strip()
+                                    for kw in keywords:
+                                        if kw.lower() in col_str:
+                                            val = r_item[col]
+                                            if pd.notna(val) and str(val).strip().lower() not in ['nan', 'none', '']:
+                                                return str(val).strip()
+                                return default
 
-                        st.success("File Uploaded! Processing Raw Data into Dashboard Format...")
+                            st.success("File Uploaded! Processing Raw Data into Dashboard Format...")
 
-                        formatted_rows = []
-                        s_no = 1
+                            formatted_rows = []
+                            s_no = 1
 
-                        for _, row in s_df.iterrows():
-                            cx_name = _get_row_val(row, ['first name', 'customer_name', 'name', 'customer'])
-                            raw_phone = _get_row_val(row, ['phone', 'mobile', 'contact', 'lsq phone'])
-                            email = _get_row_val(row, ['email', 'mail'])
-                            plan_name = _get_row_val(row, ['plan name', 'plan_name', 'plan'])
-                            plan_feat_raw = _get_row_val(row, ['plan features', 'features', 'feature'])
-                            gst_num = _get_row_val(row, ['gst', 'gstin'])
-                            lsq_phone = _get_row_val(row, ['lsq phone', 'lsq_phone', 'lsq'])
-                            plan_start = _get_row_val(row, ['app_data', 'app data', 'plan start date', 'plan stat date', 'start date', 'stat date', 'date', 'created at', 'created date', 'onboarding date'])
-                            if plan_start:
-                                try:
-                                    p_dt = pd.to_datetime(plan_start, errors='coerce')
-                                    if pd.notna(p_dt):
-                                        plan_start = p_dt.strftime('%d/%m/%Y')
-                                except:
-                                    pass
-                            plan_end = _get_row_val(row, ['plan end date', 'end date'])
-
-                            # Skip row ONLY if name, phone, and plan_name are ALL missing
-                            if not cx_name and not raw_phone and not plan_name:
-                                continue
-
-                            if not plan_name:
-                                plan_name = "Standard Plan"
-
-                            phone_clean_match = raw_phone.replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
-                            phone_display = phone_clean_match
-
-                            # Extract Features properly via unified resolver
-                            features = resolve_features_for_plan(plan_name)
-                            if not features and plan_feat_raw:
-                                features = [f.strip() for f in plan_feat_raw.split(',') if f.strip()]
-                            if not features:
-                                features = [plan_name]
-
-                            health_status = str(row.get('Usage check', "No Data (Not Uploaded)"))
-                            login_7d = "No"
-                            cp_7d = "No"
-                            sync_7d = ""
-
-                            # Dynamic column finding for Usage Data
-                            col_credits = next((c for c in s_df.columns if 'credit' in c.lower() or 'cp usage' in c.lower()), None)
-                            col_login = next((c for c in s_df.columns if 'login' in c.lower()), None)
-                            col_sync = next((c for c in s_df.columns if 'sync' in c.lower()), None)
-                            col_contacts = next((c for c in s_df.columns if 'contact' in c.lower() and 'fetch' in c.lower()), None)
-
-                            c_val = 0
-                            cp_7d = "None"
-                            login_7d = "None"
-                            sync_7d = "None"
-                            contact_7d = "None"
-
-                            # ── USAGE HEALTH EVALUATION LOGIC (POINTS SYSTEM) ──
-                            if col_credits or col_login or col_sync or col_contacts:
-                                cp_score = 0
-                                # ── 1. CP Usage / Credits (Plan-Wise Dynamic) ──
-                                if col_credits:
-                                    c_used = str(row[col_credits]).replace(',', '').strip()
+                            for _, row in s_df.iterrows():
+                                cx_name = _get_row_val(row, ['first name', 'customer_name', 'name', 'customer'])
+                                raw_phone = _get_row_val(row, ['phone', 'mobile', 'contact', 'lsq phone'])
+                                email = _get_row_val(row, ['email', 'mail'])
+                                plan_name = _get_row_val(row, ['plan name', 'plan_name', 'plan'])
+                                plan_feat_raw = _get_row_val(row, ['plan features', 'features', 'feature'])
+                                gst_num = _get_row_val(row, ['gst', 'gstin'])
+                                lsq_phone = _get_row_val(row, ['lsq phone', 'lsq_phone', 'lsq'])
+                                plan_start = _get_row_val(row, ['app_data', 'app data', 'plan start date', 'plan stat date', 'start date', 'stat date', 'date', 'created at', 'created date', 'onboarding date'])
+                                if plan_start:
                                     try:
-                                        c_val = float(c_used) if c_used and c_used.lower() != 'nan' else 0
+                                        p_dt = pd.to_datetime(plan_start, errors='coerce')
+                                        if pd.notna(p_dt):
+                                            plan_start = p_dt.strftime('%d/%m/%Y')
                                     except:
-                                        c_val = 0
+                                        pass
+                                plan_end = _get_row_val(row, ['plan end date', 'end date'])
 
-                                    cp_7d, cp_score = eval_plan_credits_and_score(plan_name, c_val)
+                                # Skip row ONLY if name, phone, and plan_name are ALL missing
+                                if not cx_name and not raw_phone and not plan_name:
+                                    continue
 
-                                # ── 2. App Login ──
-                                if col_login:
-                                    l_login = str(row[col_login]).strip()
-                                    if l_login and l_login.lower() not in ['nan', 'none', 'no', 'false', '0', '']:
-                                        login_7d = "Yes"
+                                if not plan_name:
+                                    plan_name = "Standard Plan"
+
+                                phone_clean_match = raw_phone.replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
+                                phone_display = phone_clean_match
+
+                                # Extract Features properly via unified resolver
+                                features = resolve_features_for_plan(plan_name)
+                                if not features and plan_feat_raw:
+                                    features = [f.strip() for f in plan_feat_raw.split(',') if f.strip()]
+                                if not features:
+                                    features = [plan_name]
+
+                                health_status = str(row.get('Usage check', "No Data (Not Uploaded)"))
+                                login_7d = "No"
+                                cp_7d = "No"
+                                sync_7d = ""
+
+                                # Dynamic column finding for Usage Data
+                                col_credits = next((c for c in s_df.columns if 'credit' in c.lower() or 'cp usage' in c.lower()), None)
+                                col_login = next((c for c in s_df.columns if 'login' in c.lower()), None)
+                                col_sync = next((c for c in s_df.columns if 'sync' in c.lower()), None)
+                                col_contacts = next((c for c in s_df.columns if 'contact' in c.lower() and 'fetch' in c.lower()), None)
+
+                                c_val = 0
+                                cp_7d = "None"
+                                login_7d = "None"
+                                sync_7d = "None"
+                                contact_7d = "None"
+
+                                # ── USAGE HEALTH EVALUATION LOGIC (POINTS SYSTEM) ──
+                                if col_credits or col_login or col_sync or col_contacts:
+                                    cp_score = 0
+                                    # ── 1. CP Usage / Credits (Plan-Wise Dynamic) ──
+                                    if col_credits:
+                                        c_used = str(row[col_credits]).replace(',', '').strip()
+                                        try:
+                                            c_val = float(c_used) if c_used and c_used.lower() != 'nan' else 0
+                                        except:
+                                            c_val = 0
+
+                                        cp_7d, cp_score = eval_plan_credits_and_score(plan_name, c_val)
+
+                                    # ── 2. App Login ──
+                                    if col_login:
+                                        l_login = str(row[col_login]).strip()
+                                        if l_login and l_login.lower() not in ['nan', 'none', 'no', 'false', '0', '']:
+                                            login_7d = "Yes"
+                                        else:
+                                            login_7d = "No"
+
+                                    # ── 3. Last Sync ──
+                                    if col_sync:
+                                        s_status = str(row[col_sync]).strip().lower()
+                                        if 'more' in s_status or s_status in ['no', 'false', '0']:
+                                            sync_7d = "No"
+                                        elif s_status and s_status != 'nan':
+                                            sync_7d = "Yes"
+
+                                    # ── 4. Contact Details Fetched ──
+                                    contact_val = 0
+                                    if col_contacts:
+                                        c_raw = str(row[col_contacts]).replace(',', '').strip()
+                                        try:
+                                            contact_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
+                                        except:
+                                            contact_val = 0
+
+                                    if contact_val > 30:
+                                        contact_7d = "More than 31"
+                                    elif contact_val >= 11:
+                                        contact_7d = "11 to 30"
+                                    elif contact_val > 0:
+                                        contact_7d = "0 to 10"
                                     else:
-                                        login_7d = "No"
+                                        contact_7d = "None"
 
-                                # ── 3. Last Sync ──
-                                if col_sync:
-                                    s_status = str(row[col_sync]).strip().lower()
-                                    if 'more' in s_status or s_status in ['no', 'false', '0']:
-                                        sync_7d = "No"
-                                    elif s_status and s_status != 'nan':
-                                        sync_7d = "Yes"
+                                    h_score = 0
+                                    if login_7d == "Yes": h_score += 2
+                                    if sync_7d == "Yes": h_score += 1
+                                    h_score += cp_score
+                                    if contact_val > 30: h_score += 2
+                                    elif contact_val >= 11: h_score += 1
 
-                                # ── 4. Contact Details Fetched ──
-                                contact_val = 0
-                                if col_contacts:
-                                    c_raw = str(row[col_contacts]).replace(',', '').strip()
-                                    try:
-                                        contact_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
-                                    except:
-                                        contact_val = 0
+                                    raw_health = str(row.get('Usage check', '')).strip()
+                                    if c_val == 0 and login_7d != "Yes" and sync_7d != "Yes":
+                                        if h_score == 0: health_status = "No Usage 🔴"
+                                        elif h_score <= 3: health_status = "Low Usage 🟡"
+                                        else: health_status = "Proper Usage 🟢"
+                                    elif raw_health and any(h in raw_health for h in ['Proper', 'Low', 'No']):
+                                        health_status = raw_health
+                                    else:
+                                        if h_score == 0: health_status = "No Usage 🔴"
+                                        elif h_score <= 3: health_status = "Low Usage 🟡"
+                                        else: health_status = "Proper Usage 🟢"
 
-                                if contact_val > 30:
-                                    contact_7d = "More than 31"
-                                elif contact_val >= 11:
-                                    contact_7d = "11 to 30"
-                                elif contact_val > 0:
-                                    contact_7d = "0 to 10"
-                                else:
-                                    contact_7d = "None"
+                                row['Credits used'] = c_val
 
-                                h_score = 0
-                                if login_7d == "Yes": h_score += 2
-                                if sync_7d == "Yes": h_score += 1
-                                h_score += cp_score
-                                if contact_val > 30: h_score += 2
-                                elif contact_val >= 11: h_score += 1
-
-                                raw_health = str(row.get('Usage check', '')).strip()
-                                if c_val == 0 and login_7d != "Yes" and sync_7d != "Yes":
-                                    if h_score == 0: health_status = "No Usage 🔴"
-                                    elif h_score <= 3: health_status = "Low Usage 🟡"
-                                    else: health_status = "Proper Usage 🟢"
-                                elif raw_health and any(h in raw_health for h in ['Proper', 'Low', 'No']):
-                                    health_status = raw_health
-                                else:
-                                    if h_score == 0: health_status = "No Usage 🔴"
-                                    elif h_score <= 3: health_status = "Low Usage 🟡"
-                                    else: health_status = "Proper Usage 🟢"
-
-                            row['Credits used'] = c_val
-
-                            for i, feat in enumerate(features):
                                 formatted_rows.append({
                                     "S.No": s_no if i == 0 else "",
                                     "Name": cx_name,
@@ -3450,144 +3449,143 @@ with tab_upload:
                                     "App login done in last 7 days": login_7d,
                                     "raw_credits": c_val
                                 })
-                            s_no += 1
+                                s_no += 1
 
-                        out_df = pd.DataFrame(formatted_rows)
+                            out_df = pd.DataFrame(formatted_rows)
 
-                        if not out_df.empty:
-                            # Ensure output columns match sqlite schema
-                            batch_name = uploaded_file.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-                            out_df['Upload_Batch'] = batch_name
+                            if not out_df.empty:
+                                # Ensure output columns match sqlite schema
+                                batch_name = uploaded_file.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+                                out_df['Upload_Batch'] = batch_name
 
-                            out_df = out_df.astype(str)
-                            out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
-                        else:
-                            st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
-                            st.stop()
+                                out_df = out_df.astype(str)
+                                out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
+                            else:
+                                st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
+                                st.stop()
 
-                        # ── AUTO-FILL: Map call_status / remarks / follow_up from uploaded file ──
-                        # Detect column names flexibly (case-insensitive)
-                        def _find_col(df, keywords):
-                            for col in df.columns:
-                                if any(k in col.lower() for k in keywords):
-                                    return col
-                            return None
+                            # ── AUTO-FILL: Map call_status / remarks / follow_up from uploaded file ──
+                            def _find_col(df, keywords):
+                                for col in df.columns:
+                                    if any(k in col.lower() for k in keywords):
+                                        return col
+                                return None
 
-                        col_cs  = _find_col(s_df, ['call_status', 'call status', 'callstatus', 'status'])
-                        col_rem = _find_col(s_df, ['remark', 'note', 'comment'])
-                        col_fup = _find_col(s_df, ['follow_up', 'follow up', 'followup', 'callback'])
-                        col_ph  = _find_col(s_df, ['phone', 'mobile', 'contact'])
+                            col_cs  = _find_col(s_df, ['call_status', 'call status', 'callstatus', 'status'])
+                            col_rem = _find_col(s_df, ['remark', 'note', 'comment'])
+                            col_fup = _find_col(s_df, ['follow_up', 'follow up', 'followup', 'callback'])
+                            col_ph  = _find_col(s_df, ['phone', 'mobile', 'contact'])
 
-                        if col_ph and (col_cs or col_rem or col_fup):
-                            auto_fill_count = 0
-                            for _, row in s_df.iterrows():
-                                phone_raw = str(row.get(col_ph, '')).replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
-                                if not phone_raw or phone_raw.lower() in ['nan', 'none', '']: continue
+                            if col_ph and (col_cs or col_rem or col_fup):
+                                auto_fill_count = 0
+                                for _, row in s_df.iterrows():
+                                    phone_raw = str(row.get(col_ph, '')).replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
+                                    if not phone_raw or phone_raw.lower() in ['nan', 'none', '']: continue
 
-                                cs_val  = str(row[col_cs]).strip()  if col_cs  and str(row[col_cs]).strip()  not in ['nan','None',''] else ''
-                                rem_val = str(row[col_rem]).strip() if col_rem and str(row[col_rem]).strip() not in ['nan','None',''] else ''
-                                fup_raw = str(row[col_fup]).strip() if col_fup and str(row[col_fup]).strip() not in ['nan','None',''] else ''
-                                try:
-                                    fup_val = str(pd.to_datetime(fup_raw, dayfirst=True).date()) if fup_raw else ''
-                                except:
-                                    fup_val = ''
+                                    cs_val  = str(row[col_cs]).strip()  if col_cs  and str(row[col_cs]).strip()  not in ['nan','None',''] else ''
+                                    rem_val = str(row[col_rem]).strip() if col_rem and str(row[col_rem]).strip() not in ['nan','None',''] else ''
+                                    fup_raw = str(row[col_fup]).strip() if col_fup and str(row[col_fup]).strip() not in ['nan','None',''] else ''
+                                    try:
+                                        fup_val = str(pd.to_datetime(fup_raw, dayfirst=True).date()) if fup_raw else ''
+                                    except:
+                                        fup_val = ''
 
-                                if cs_val or rem_val or fup_val:
-                                    conn.execute('''
-                                        INSERT INTO customer_interactions (phone, status_update, remarks, follow_up)
-                                        VALUES (?, ?, ?, ?)
-                                        ON CONFLICT(phone) DO UPDATE SET
-                                            status_update = CASE WHEN excluded.status_update != '' THEN excluded.status_update ELSE status_update END,
-                                            remarks       = CASE WHEN excluded.remarks     != '' THEN excluded.remarks     ELSE remarks     END,
-                                            follow_up     = CASE WHEN excluded.follow_up   != '' THEN excluded.follow_up   ELSE follow_up   END
-                                    ''', (phone_raw, cs_val, rem_val, fup_val))
-                                    auto_fill_count += 1
-                            conn.commit()
-                            if auto_fill_count:
-                                st.info(f"✅ **Auto-Fill Complete!** {auto_fill_count} customers ke Status / Remarks / Follow-up Date automatically map ho gaye uploaded data se.")
-                        # ── END AUTO-FILL ──
+                                    if cs_val or rem_val or fup_val:
+                                        conn.execute('''
+                                            INSERT INTO customer_interactions (phone, status_update, remarks, follow_up)
+                                            VALUES (?, ?, ?, ?)
+                                            ON CONFLICT(phone) DO UPDATE SET
+                                                status_update = CASE WHEN excluded.status_update != '' THEN excluded.status_update ELSE status_update END,
+                                                remarks       = CASE WHEN excluded.remarks     != '' THEN excluded.remarks     ELSE remarks     END,
+                                                follow_up     = CASE WHEN excluded.follow_up   != '' THEN excluded.follow_up   ELSE follow_up   END
+                                        ''', (phone_raw, cs_val, rem_val, fup_val))
+                                        auto_fill_count += 1
+                                conn.commit()
+                                if auto_fill_count:
+                                    st.info(f"✅ **Auto-Fill Complete!** {auto_fill_count} customers ke Status / Remarks / Follow-up Date automatically map ho gaye uploaded data se.")
 
-                        st.session_state['last_processed_file_id'] = file_id
-                        st.session_state['current_upload_df'] = out_df
-                        st.cache_data.clear()
-                        st.success("Data Formatted and Saved to History!")
-                        st.rerun()
-
-                    except Exception as e:
-                        st.error(f"Error reading file: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
-
-        else:
-            import pandas as pd
-            s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
-            if not s_batches.empty:
-                st.markdown("""
-                <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-left: 4px solid #F59E0B; padding: 14px 18px; border-radius: 10px; margin-bottom: 16px;">
-                    <h4 style="margin:0; color:#92400E; font-size:16px;">📥 Master Backup Download Before Deleting Extra Sheets</h4>
-                    <p style="margin:4px 0 0 0; color:#78350F; font-size:13px;">
-                        Download full combined backup of all 727 unique customers across July & August data before deleting extra upload batches.
-                    </p>
-                </div>
-                """, unsafe_allow_html=True)
-
-                full_master_df = fetch_all_history()
-                filtered_master, eval_master = prepare_eval_df(full_master_df)
-                dedup_master = eval_master.drop_duplicates(subset=['phone'], keep='last')
-                excel_backup = to_excel_download(dedup_master, sheet_name="Master_Deduplicated")
-                csv_backup = dedup_master.to_csv(index=False).encode('utf-8')
-
-                d_c1, d_c2 = st.columns([1, 1])
-                with d_c1:
-                    st.download_button(
-                        "📥 Download Master 727 Customers Backup (Excel)",
-                        data=excel_backup,
-                        file_name="CredFlow_Master_Dataset_Backup_727_Customers.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        type="primary"
-                    )
-                with d_c2:
-                    st.download_button(
-                        "📄 Download Master 727 Customers Backup (CSV)",
-                        data=csv_backup,
-                        file_name="CredFlow_Master_Dataset_Backup_727_Customers.csv",
-                        mime="text/csv",
-                        use_container_width=True
-                    )
-
-                st.markdown("---")
-
-                extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July_Adoption_Project' in b or '08092026' in b)]
-                if extra_batches:
-                    with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July & 08092026 Only)"):
-                        st.write(f"The following intermediate batches will be safely removed, keeping **July_Adoption_Project** and **08092026.csv** intact:")
-                        for eb in extra_batches:
-                            st.caption(f"&bull; {eb}")
-                        if st.button("🗑️ Delete All Intermediate Extra Batches Now", key="btn_cleanup_extra"):
-                            for eb in extra_batches:
-                                conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (eb,))
-                            conn.commit()
+                            st.session_state['last_processed_file_id'] = file_id
+                            st.session_state['current_upload_df'] = out_df
                             st.cache_data.clear()
-                            st.success(f"Successfully deleted {len(extra_batches)} extra batches! Data is now clean and deduplicated.")
+                            st.success("Data Formatted and Saved to History!")
                             st.rerun()
 
-                st.markdown("#### 📂 Manage Individual Upload Batches")
-                col_sel, col_del = st.columns([8, 2])
-                with col_sel:
-                    selected_batch = st.selectbox("Select Past Upload Batch to View or Delete", s_batches['Upload_Batch'].tolist(), key="manage_batch_sel")
-                with col_del:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    if st.button("🗑️ Delete Selected Batch", use_container_width=True, key="del_single_batch"):
-                        conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (selected_batch,))
-                        conn.commit()
-                        st.cache_data.clear()
-                        st.success("Batch deleted successfully!")
-                        st.rerun()
+                        except Exception as e:
+                            st.error(f"Error reading file: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
 
-                if selected_batch:
-                    hist_df = pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", conn, params=(selected_batch,))
-                    st.markdown("#### 📂 Preview Selected Batch Data")
-                    st.dataframe(hist_df, use_container_width=True)
             else:
-                st.warning("No past uploads found.")
+                import pandas as pd
+                s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+                if not s_batches.empty:
+                    st.markdown('''
+                    <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-left: 4px solid #F59E0B; padding: 14px 18px; border-radius: 10px; margin-bottom: 16px;">
+                        <h4 style="margin:0; color:#92400E; font-size:16px;">📥 Master Backup Download Before Deleting Extra Sheets</h4>
+                        <p style="margin:4px 0 0 0; color:#78350F; font-size:13px;">
+                            Download full combined backup of all 727 unique customers across July & August data before deleting extra upload batches.
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
+
+                    full_master_df = fetch_all_history()
+                    filtered_master, eval_master = prepare_eval_df(full_master_df)
+                    dedup_master = eval_master.drop_duplicates(subset=['phone'], keep='last')
+                    excel_backup = to_excel_download(dedup_master, sheet_name="Master_Deduplicated")
+                    csv_backup = dedup_master.to_csv(index=False).encode('utf-8')
+
+                    d_c1, d_c2 = st.columns([1, 1])
+                    with d_c1:
+                        st.download_button(
+                            "📥 Download Master 727 Customers Backup (Excel)",
+                            data=excel_backup,
+                            file_name="CredFlow_Master_Dataset_Backup_727_Customers.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            type="primary"
+                        )
+                    with d_c2:
+                        st.download_button(
+                            "📄 Download Master 727 Customers Backup (CSV)",
+                            data=csv_backup,
+                            file_name="CredFlow_Master_Dataset_Backup_727_Customers.csv",
+                            mime="text/csv",
+                            use_container_width=True
+                        )
+
+                    st.markdown("---")
+
+                    extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July_Adoption_Project' in b or '08092026' in b)]
+                    if extra_batches:
+                        with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July & 08092026 Only)"):
+                            st.write(f"The following intermediate batches will be safely removed, keeping **July_Adoption_Project** and **08092026.csv** intact:")
+                            for eb in extra_batches:
+                                st.caption(f"&bull; {eb}")
+                            if st.button("🗑️ Delete All Intermediate Extra Batches Now", key="btn_cleanup_extra"):
+                                for eb in extra_batches:
+                                    conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (eb,))
+                                conn.commit()
+                                st.cache_data.clear()
+                                st.success(f"Successfully deleted {len(extra_batches)} extra batches! Data is now clean and deduplicated.")
+                                st.rerun()
+
+                    st.markdown("#### 📂 Manage Individual Upload Batches")
+                    col_sel, col_del = st.columns([8, 2])
+                    with col_sel:
+                        selected_batch = st.selectbox("Select Past Upload Batch to View or Delete", s_batches['Upload_Batch'].tolist(), key="manage_batch_sel")
+                    with col_del:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("🗑️ Delete Selected Batch", use_container_width=True, key="del_single_batch"):
+                            conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (selected_batch,))
+                            conn.commit()
+                            st.cache_data.clear()
+                            st.success("Batch deleted successfully!")
+                            st.rerun()
+
+                    if selected_batch:
+                        hist_df = pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", conn, params=(selected_batch,))
+                        st.markdown("#### 📂 Preview Selected Batch Data")
+                        st.dataframe(hist_df, use_container_width=True)
+                else:
+                    st.warning("No past uploads found.")
+
