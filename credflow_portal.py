@@ -2271,70 +2271,75 @@ def render_crm(cx_df):
                         st.error(f"Failed to send emails: {result}")
 
         # ── AUTO-SAVE LOGIC (SQLite Database) ──
-        # Compare edited_df with ui_display_df (matching shape)
-        diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
-        diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
-        diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
-        diff_status = ui_display_df['Call Status'].fillna('').astype(str).str.strip() != edited_df['Call Status'].fillna('').astype(str).str.strip()
-        diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_issue = ui_display_df['Issue Type'].fillna('').astype(str).str.strip() != edited_df['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in ui_display_df.columns and 'Issue Type' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_poa = ui_display_df['Plan of Action'].fillna('').astype(str).str.strip() != edited_df['Plan of Action'].fillna('').astype(str).str.strip() if 'Plan of Action' in ui_display_df.columns and 'Plan of Action' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
-        diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
+        # Check Streamlit data_editor session state to ensure user actually edited cells
+        editor_state = st.session_state.get(editor_key, {})
+        user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
 
-        f_ui = pd.to_datetime(ui_display_df['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
-        f_ed = pd.to_datetime(edited_df['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
-        diff_follow = f_ui != f_ed
+        if user_edited_rows:
+            diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
+            diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
+            diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
+            diff_status = ui_display_df['Call Status'].fillna('').astype(str).str.strip() != edited_df['Call Status'].fillna('').astype(str).str.strip()
+            diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+            diff_issue = ui_display_df['Issue Type'].fillna('').astype(str).str.strip() != edited_df['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in ui_display_df.columns and 'Issue Type' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+            diff_poa = ui_display_df['Plan of Action'].fillna('').astype(str).str.strip() != edited_df['Plan of Action'].fillna('').astype(str).str.strip() if 'Plan of Action' in ui_display_df.columns and 'Plan of Action' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+            diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
+            diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
 
-        diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
+            f_ui = ui_display_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
+            f_ed = edited_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
+            diff_follow = f_ui != f_ed
 
-        if diff.any():
-            changed_rows = edited_df[diff]
-            for idx, row in changed_rows.iterrows():
-                p = str(row.get('phone', '')).replace('.0', '').strip()
-                if not p: continue
-                w = 1 if row['✅ WA Sent'] else 0
-                fw = 1 if row['✅ Free WA Sent'] else 0
-                c = str(row.get('Call Status', ''))
-                su = str(row.get('Status Update', ''))
-                it = str(row.get('Issue Type', ''))
-                poa = str(row.get('Plan of Action', ''))
-                r = str(row['Remarks'])
-                f_val = row.get('Call Date', None)
-                f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
-                e = 1 if row['📨 Email Sent'] else 0
-                ec = int(row['Extra Credits']) if str(row['Extra Credits']).strip() not in ['', 'nan', 'None'] else 0
+            diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
 
-                # ── AUTO REMARK & EMAIL ALERT ON CALLBACK REQUEST ──
-                if (c in ["Call Back Requested", "Call Later"] or su in ["Call Back Requested", "Call Later"]):
-                    if "⏰" not in r:
-                        r = f"⏰ [Callback Requested: {f or 'Set Date'}] {r}".strip()
-                    # Trigger automated email alert to support@credflow.in if status just changed
-                    if (diff_status.loc[idx] if idx in diff_status.index else False) or (diff_status_upd.loc[idx] if idx in diff_status_upd.index else False):
-                        cx_name = str(row.get('Name', 'Customer'))
-                        cx_email = str(row.get('email', ''))
-                        plan_name = str(row.get('plan name', ''))
-                        succ_mail, _ = send_callback_support_email(cx_name, p, cx_email, plan_name, f, r)
-                        if succ_mail:
-                            st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
+            edited_indices = [idx for idx in user_edited_rows.keys() if idx in edited_df.index and diff.loc[idx]]
+            if edited_indices:
+                changed_rows = edited_df.loc[edited_indices]
+                for idx, row in changed_rows.iterrows():
+                    p = str(row.get('phone', '')).replace('.0', '').strip()
+                    if not p: continue
+                    w = 1 if row['✅ WA Sent'] else 0
+                    fw = 1 if row['✅ Free WA Sent'] else 0
+                    c = str(row.get('Call Status', ''))
+                    su = str(row.get('Status Update', ''))
+                    it = str(row.get('Issue Type', ''))
+                    poa = str(row.get('Plan of Action', ''))
+                    r = str(row['Remarks'])
+                    f_val = row.get('Call Date', None)
+                    f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
+                    e = 1 if row['📨 Email Sent'] else 0
+                    ec = int(row['Extra Credits']) if str(row['Extra Credits']).strip() not in ['', 'nan', 'None'] else 0
 
-                has_activity = bool(c or su or it or poa or r or f)
-                now_call_at = datetime.now().strftime("%Y-%m-%d") if has_activity else ""
-                # Fetch previous last_call_at if present
-                curr_row = conn.execute("SELECT last_call_at FROM customer_interactions WHERE phone = ?", (p,)).fetchone()
-                prev_last_call = curr_row[0] if (curr_row and curr_row[0]) else ""
-                final_last_call = now_call_at if (has_activity and not prev_last_call) else (now_call_at if has_activity else prev_last_call)
+                    # ── AUTO REMARK & EMAIL ALERT ON CALLBACK REQUEST ──
+                    if (c in ["Call Back Requested", "Call Later"] or su in ["Call Back Requested", "Call Later"]):
+                        if "⏰" not in r:
+                            r = f"⏰ [Callback Requested: {f or 'Set Date'}] {r}".strip()
+                        # Trigger automated email alert to support@credflow.in if status just changed
+                        if (diff_status.loc[idx] if idx in diff_status.index else False) or (diff_status_upd.loc[idx] if idx in diff_status_upd.index else False):
+                            cx_name = str(row.get('Name', 'Customer'))
+                            cx_email = str(row.get('email', ''))
+                            plan_name = str(row.get('plan name', ''))
+                            succ_mail, _ = send_callback_support_email(cx_name, p, cx_email, plan_name, f, r)
+                            if succ_mail:
+                                st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
 
-                conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
-                conn.execute('''
-                    INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, extra_credits, last_call_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (p, w, fw, e, c, su, it, poa, r, f, ec, final_last_call))
-            conn.commit()
-            st.toast("✅ Auto-saved changes to database!", icon="💾")
-            import time
-            time.sleep(1)
-            st.rerun()
+                    has_activity = bool(c or su or it or poa or r or f)
+                    now_call_at = datetime.now().strftime("%Y-%m-%d") if has_activity else ""
+                    # Fetch previous last_call_at if present
+                    curr_row = conn.execute("SELECT last_call_at FROM customer_interactions WHERE phone = ?", (p,)).fetchone()
+                    prev_last_call = curr_row[0] if (curr_row and curr_row[0]) else ""
+                    final_last_call = now_call_at if (has_activity and not prev_last_call) else (now_call_at if has_activity else prev_last_call)
+
+                    conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
+                    conn.execute('''
+                        INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, extra_credits, last_call_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (p, w, fw, e, c, su, it, poa, r, f, ec, final_last_call))
+                conn.commit()
+                st.toast("✅ Auto-saved changes to database!", icon="💾")
+                import time
+                time.sleep(1)
+                st.rerun()
 def render_telecalling_analytics(conn):
     pass
 
