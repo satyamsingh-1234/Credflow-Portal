@@ -1557,8 +1557,10 @@ def render_dashboard(df_sales, prefix):
     filtered_export = filtered.copy()
     if 'phone' in filtered_export.columns:
         filtered_export['merge_phone'] = filtered_export['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-        inter_cols = [c for c in ['phone', 'call_status', 'status_update', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in interactions_dash.columns]
-        filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_db'))
+        db_cols_to_drop = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'last_call_at', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
+        filtered_export = filtered_export.drop(columns=[c for c in db_cols_to_drop if c in filtered_export.columns], errors='ignore')
+        inter_cols = [c for c in ['phone', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in interactions_dash.columns]
+        filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], left_on='merge_phone', right_on='phone', how='left')
 
     # ── OVERALL DASHBOARD ──────────────────────────────────────────────
     st.markdown("---")
@@ -1579,7 +1581,9 @@ def render_dashboard(df_sales, prefix):
     no_data = unique_cx - no_usage - low_usage - proper_usage
 
     dash_df['merge_phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    dash_merged = pd.merge(dash_df, interactions_dash, left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_db'))
+    db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
+    dash_df = dash_df.drop(columns=[c for c in db_cols_dash if c in dash_df.columns], errors='ignore')
+    dash_merged = pd.merge(dash_df, interactions_dash, left_on='merge_phone', right_on='phone', how='left')
 
     wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
     free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
@@ -1902,7 +1906,10 @@ def render_crm(cx_df):
         interactions_df['phone'] = interactions_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         interactions_df = interactions_df.drop_duplicates(subset=['phone'], keep='last')
 
-        call_df = pd.merge(call_df, interactions_df, left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_y'))
+        db_cols_crm = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'wa_sent', 'free_wa_sent', 'email_sent', 'extra_credits', 'status_update', 'last_call_at', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
+        call_df = call_df.drop(columns=[c for c in db_cols_crm if c in call_df.columns], errors='ignore')
+
+        call_df = pd.merge(call_df, interactions_df, left_on='merge_phone', right_on='phone', how='left')
         call_df = call_df.drop_duplicates(subset=['merge_phone'], keep='last')
 
         call_df['wa_sent'] = call_df['wa_sent'].fillna(0).astype(bool)
@@ -2581,10 +2588,11 @@ def render_batch_comparison(conn):
         interactions_comp['phone'] = interactions_comp['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         interactions_comp = interactions_comp.drop_duplicates(subset=['phone'], keep='last')
         merged['merge_phone'] = merged['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-        int_cols = ['phone', 'call_status', 'issue_type', 'remarks', 'follow_up']
+        db_cols_comp = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
+        merged = merged.drop(columns=[c for c in db_cols_comp if c in merged.columns], errors='ignore')
+        int_cols = ['phone', 'call_status', 'issue_type', 'remarks', 'follow_up', 'plan_of_action']
         int_cols = [c for c in int_cols if c in interactions_comp.columns]
-        merged = pd.merge(merged, interactions_comp[int_cols], left_on='merge_phone', right_on='phone', how='left', suffixes=('', '_db'))
-        merged = merged.drop(columns=['phone_db'], errors='ignore')
+        merged = pd.merge(merged, interactions_comp[int_cols], left_on='merge_phone', right_on='phone', how='left')
     else:
         merged['call_status'] = ""
         merged['issue_type'] = ""
