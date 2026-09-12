@@ -454,8 +454,6 @@ if os.path.exists(LOGO_PATH):
     except Exception:
         logo_src = ""
 
-st.set_page_config(page_title="Credflow SaaS Customer Usage Dashboard", layout="wide", page_icon=LOGO_PATH if os.path.exists(LOGO_PATH) else "🚀")
-
 @st.cache_data(show_spinner=False)
 def fetch_history_batch(batch_name):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
