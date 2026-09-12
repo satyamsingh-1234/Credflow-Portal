@@ -2324,51 +2324,6 @@ def render_telecalling_analytics(conn):
         
         st.markdown("---")
         
-        # ── 2. DATE-WISE BREAKDOWN SUMMARY (Sept 2nd Onwards) ──
-        st.markdown("#### 📅 Date-Wise Call Performance Summary (Sept 2 - Today)")
-        
-        # Filter dataframe for Sept 2nd onwards
-        sept_df = interactions_df[interactions_df['parsed_call_date'] >= sept2_d].copy()
-        
-        if not sept_df.empty:
-            def _get_call_category(status):
-                st_str = str(status).strip()
-                if st_str in connected_statuses: return "🟢 Connected"
-                if st_str in callback_statuses: return "🟡 Callback"
-                if st_str in unreachable_statuses: return "🔴 Unreachable"
-                return "⚪ Other/Logged"
-
-            sept_df['Call Category'] = sept_df['call_status'].apply(_get_call_category)
-            
-            # Daily Groupby
-            daily_summary = sept_df.groupby(['parsed_call_date', 'Call Category']).size().unstack(fill_value=0).reset_index()
-            daily_summary.rename(columns={'parsed_call_date': 'Call Date'}, inplace=True)
-            daily_summary['Total Calls'] = daily_summary.select_dtypes(include='number').sum(axis=1)
-            daily_summary.sort_values(by='Call Date', ascending=False, inplace=True)
-            
-            d_c1, d_c2 = st.columns([1.5, 1])
-            with d_c1:
-                # Daily Bar Chart
-                fig_daily = px.bar(
-                    sept_df.groupby(['parsed_call_date', 'Call Category']).size().reset_index(name='Count'),
-                    x='parsed_call_date', y='Count', color='Call Category',
-                    title="Daily Telecalling Volume Trend (Sept 2 Onwards)",
-                    color_discrete_map={
-                        '🟢 Connected': '#10B981',
-                        '🟡 Callback': '#F59E0B',
-                        '🔴 Unreachable': '#EF4444',
-                        '⚪ Other/Logged': '#9CA3AF'
-                    },
-                    barmode='stack'
-                )
-                fig_daily.update_layout(height=320, xaxis_title="Call Date", yaxis_title="Number of Calls", margin=dict(t=40, b=20, l=20, r=20))
-                st.plotly_chart(fig_daily, use_container_width=True)
-                
-            with d_c2:
-                st.dataframe(daily_summary, use_container_width=True)
-                
-        st.markdown("---")
-        
         # ── 3. DETAILED LOG FOR SELECTED DATE ──
         st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
         if not date_calls_df.empty:
