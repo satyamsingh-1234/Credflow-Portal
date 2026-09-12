@@ -22,8 +22,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── DATABASE SETUP ──
-DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
+# ── DATABASE SETUP & CLOUD PERSISTENCE ──
+REPO_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
+
+# Use /tmp on Linux/Streamlit Cloud to preserve live web user edits across Git redeployments
+TMP_DIR = "/tmp" if os.name != 'nt' and os.path.exists("/tmp") else None
+PERSISTENT_DB = os.path.join(TMP_DIR, "credflow_history.db") if TMP_DIR else REPO_DB
+
+if PERSISTENT_DB != REPO_DB:
+    if not os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
+        import shutil
+        try:
+            shutil.copy2(REPO_DB, PERSISTENT_DB)
+        except Exception:
+            pass
+
+DB_PATH = PERSISTENT_DB if os.path.exists(PERSISTENT_DB) else REPO_DB
 if not os.path.exists(DB_PATH) and os.path.exists(r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"):
     DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
 
