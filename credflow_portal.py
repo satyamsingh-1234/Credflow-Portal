@@ -4,7 +4,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
-from datetime import datetime, date, timedelta
 import sqlite3
 import time
 import os
@@ -1356,7 +1355,6 @@ def prepare_eval_df(df_sales):
             return date(2026, 10, 15)
         return date(2026, 9, 15)
 
-    import datetime
     eval_df['row_eff_dt'] = eval_df.apply(_calc_row_eff_dt, axis=1)
     cust_dt_map = eval_df.groupby('phone')['row_eff_dt'].min().to_dict()
     eval_df['effective_date'] = eval_df['phone'].map(cust_dt_map)
@@ -1416,7 +1414,6 @@ def render_dashboard(df_sales, prefix):
 
     custom_start_end = None
     if "Custom Date Range" in date_preset:
-        import datetime
         today_d = date.today()
         default_start = date(2026, 7, 1)
         c_input = st.date_input(
@@ -1451,7 +1448,6 @@ def render_dashboard(df_sales, prefix):
         eval_df = eval_df[mask]
 
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
-        import datetime
         today_d = date.today()
 
         if "July" in date_preset:
@@ -1475,10 +1471,10 @@ def render_dashboard(df_sales, prefix):
         else:
             target_phones = None
             if "Last 30 Days" in date_preset:
-                start_30 = today_d - datetime.timedelta(days=30)
+                start_30 = today_d - timedelta(days=30)
                 target_phones = eval_df[eval_df['effective_date'] >= start_30]['phone'].unique()
             elif "Last 90 Days" in date_preset:
-                start_90 = today_d - datetime.timedelta(days=90)
+                start_90 = today_d - timedelta(days=90)
                 target_phones = eval_df[eval_df['effective_date'] >= start_90]['phone'].unique()
             elif "Custom Date Range" in date_preset and custom_start_end is not None and len(custom_start_end) == 2:
                 s_d, e_d = custom_start_end
@@ -1737,7 +1733,6 @@ def render_crm(cx_df):
         with cb_col1:
             sel_cx_str = st.selectbox("👤 Select Customer", options=cx_options if cx_options else ["No Customers Loaded"], key="cb_cx_select")
         with cb_col2:
-            import datetime
             cb_date = st.date_input("📅 Callback Date", value=date.today(), key="cb_date_input")
         with cb_col3:
             cb_time_str = st.text_input("⏰ Callback Time", value="4:00 PM", key="cb_time_input")
@@ -1938,7 +1933,6 @@ def render_crm(cx_df):
 
         custom_date_range = None
         if date_filter == "Custom Date Range 📆":
-            import datetime
             today_d = date.today()
             custom_date_range = st.date_input("🗓️ Select Date Range (Start & End)", value=(today_d, today_d + datetime.timedelta(days=7)), key="flt_custom_dates")
 
@@ -1961,7 +1955,6 @@ def render_crm(cx_df):
             ui_df = ui_df[ui_df['📨 Email Sent'] == False]
 
         # --- Date Filter Logic ---
-        import datetime
         today_val = date.today()
         tomorrow_val = today_val + datetime.timedelta(days=1)
         f_dates = pd.to_datetime(ui_df['Follow-up Date'], errors='coerce').dt.date
@@ -2882,7 +2875,6 @@ def render_batch_comparison(conn):
 
 def render_outreach_history(conn):
     import pandas as pd
-    from datetime import datetime, date, timedelta
 
     st.markdown("""
     <div style="background: #FFFFFF; padding: 18px 22px; border-radius: 12px; border: 1px solid #E2E8F0; border-top: 4px solid #2563EB; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
@@ -3017,7 +3009,6 @@ def render_outreach_history(conn):
 
 def render_template_manager(conn):
     import streamlit.components.v1 as components
-    from datetime import datetime, date, timedelta
 
     st.markdown("""
     <div style="background: #FFFFFF; padding: 18px 22px; border-radius: 12px; border: 1px solid #E2E8F0; border-top: 4px solid #10B981; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
@@ -3284,7 +3275,6 @@ with tab_upload:
 
                     if st.session_state.get('last_processed_file_id') != file_id:
                         try:
-                            import datetime
                             import pandas as pd
                             s_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
 
