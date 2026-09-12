@@ -63,7 +63,12 @@ if cursor.fetchone()[0] == 0:
     default_issues = ["Sync Issue", "Tech Issue", "Login Issue", "Payment Issue", "App Crash", "Feature Not Working", "Training Required", "Other"]
     for issue in default_issues:
         conn.execute("INSERT OR IGNORE INTO issue_types (issue_name) VALUES (?)", (issue,))
-conn.commit()
+# Clean up legacy "Sync" raw text from status_update column in SQLite DB
+try:
+    conn.execute("UPDATE customer_interactions SET status_update = '' WHERE status_update LIKE '%Sync%' OR status_update LIKE '%15 days%'")
+    conn.commit()
+except Exception:
+    pass
 
 # ── OUTREACH AUDIT LOGS DB SETUP ──
 conn.execute('''CREATE TABLE IF NOT EXISTS outreach_logs (
@@ -2014,8 +2019,8 @@ def render_crm(cx_df):
 
         # ── CRM INTERACTIVE TABLE (DATA EDITOR) ──
         # Fetch distinct Status Updates from DB to ensure uploaded ones are not hidden by Streamlit
-        existing_status_db = [r[0] for r in conn.execute("SELECT DISTINCT status_update FROM customer_interactions WHERE status_update IS NOT NULL AND status_update != ''").fetchall()]
-        default_status_opts = ["Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"]
+        existing_status_db = [r[0] for r in conn.execute("SELECT DISTINCT status_update FROM customer_interactions WHERE status_update IS NOT NULL AND status_update != '' AND status_update NOT LIKE '%Sync%' AND status_update NOT LIKE '%15 days%'").fetchall()]
+        default_status_opts = ["Invoice Sent ✅", "Invoice Pending ⏳", "Invoice Not Sent ❌", "Payment Done 🟢", "Payment Pending 🟡"]
         all_status_opts = [""] + list(dict.fromkeys(default_status_opts + existing_status_db))
 
         existing_poa_db = [r[0] for r in conn.execute("SELECT DISTINCT plan_of_action FROM customer_interactions WHERE plan_of_action IS NOT NULL AND plan_of_action != ''").fetchall()]
@@ -3463,18 +3468,20 @@ with tab_upload:
                                         return col
                                 return None
 
-                            col_cs  = _find_col(s_df, ['call_status', 'call status', 'callstatus', 'status'])
+                            col_cs  = _find_col(s_df, ['call_status', 'call status', 'callstatus'])
+                            col_su  = _find_col(s_df, ['status_update', 'status update', 'invoice_status', 'invoice status'])
                             col_rem = _find_col(s_df, ['remark', 'note', 'comment'])
                             col_fup = _find_col(s_df, ['follow_up', 'follow up', 'followup', 'callback'])
                             col_ph  = _find_col(s_df, ['phone', 'mobile', 'contact'])
 
-                            if col_ph and (col_cs or col_rem or col_fup):
+                            if col_ph and (col_cs or col_su or col_rem or col_fup):
                                 auto_fill_count = 0
                                 for _, row in s_df.iterrows():
                                     phone_raw = str(row.get(col_ph, '')).replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
                                     if not phone_raw or phone_raw.lower() in ['nan', 'none', '']: continue
 
                                     cs_val  = str(row[col_cs]).strip()  if col_cs  and str(row[col_cs]).strip()  not in ['nan','None',''] else ''
+                                    su_val  = str(row[col_su]).strip()  if col_su  and str(row[col_su]).strip()  not in ['nan','None',''] and 'Sync' not in str(row[col_su]) else ''
                                     rem_val = str(row[col_rem]).strip() if col_rem and str(row[col_rem]).strip() not in ['nan','None',''] else ''
                                     fup_raw = str(row[col_fup]).strip() if col_fup and str(row[col_fup]).strip() not in ['nan','None',''] else ''
                                     try:
@@ -3482,15 +3489,16 @@ with tab_upload:
                                     except:
                                         fup_val = ''
 
-                                    if cs_val or rem_val or fup_val:
+                                    if cs_val or su_val or rem_val or fup_val:
                                         conn.execute('''
-                                            INSERT INTO customer_interactions (phone, status_update, remarks, follow_up)
-                                            VALUES (?, ?, ?, ?)
+                                            INSERT INTO customer_interactions (phone, call_status, status_update, remarks, follow_up)
+                                            VALUES (?, ?, ?, ?, ?)
                                             ON CONFLICT(phone) DO UPDATE SET
+                                                call_status   = CASE WHEN excluded.call_status   != '' THEN excluded.call_status   ELSE call_status   END,
                                                 status_update = CASE WHEN excluded.status_update != '' THEN excluded.status_update ELSE status_update END,
                                                 remarks       = CASE WHEN excluded.remarks     != '' THEN excluded.remarks     ELSE remarks     END,
                                                 follow_up     = CASE WHEN excluded.follow_up   != '' THEN excluded.follow_up   ELSE follow_up   END
-                                        ''', (phone_raw, cs_val, rem_val, fup_val))
+                                        ''', (phone_raw, cs_val, su_val, rem_val, fup_val))
                                         auto_fill_count += 1
                                 conn.commit()
                                 if auto_fill_count:
