@@ -43,6 +43,14 @@ conn.execute('''CREATE TABLE IF NOT EXISTS customer_interactions (
     issue_type TEXT DEFAULT ''
 )''')
 
+# Ensure customer_interactions has unique index on phone
+try:
+    conn.execute("DELETE FROM customer_interactions WHERE rowid NOT IN (SELECT MAX(rowid) FROM customer_interactions GROUP BY phone)")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cust_int_phone ON customer_interactions(phone)")
+    conn.commit()
+except Exception:
+    pass
+
 # User-defined Issue Types (editable dropdown options)
 conn.execute('''CREATE TABLE IF NOT EXISTS issue_types (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2244,23 +2252,16 @@ def render_crm(cx_df):
                             st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
 
                 now_call_at = datetime.now().strftime("%Y-%m-%d") if c else ""
+                # Fetch previous last_call_at if present
+                curr_row = conn.execute("SELECT last_call_at FROM customer_interactions WHERE phone = ?", (p,)).fetchone()
+                prev_last_call = curr_row[0] if (curr_row and curr_row[0]) else ""
+                final_last_call = now_call_at if c else prev_last_call
 
+                conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
                 conn.execute('''
                     INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, extra_credits, last_call_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(phone) DO UPDATE SET
-                        wa_sent=excluded.wa_sent,
-                        free_wa_sent=excluded.free_wa_sent,
-                        email_sent=excluded.email_sent,
-                        call_status=excluded.call_status,
-                        status_update=excluded.status_update,
-                        issue_type=excluded.issue_type,
-                        plan_of_action=excluded.plan_of_action,
-                        remarks=excluded.remarks,
-                        follow_up=excluded.follow_up,
-                        extra_credits=excluded.extra_credits,
-                        last_call_at=CASE WHEN excluded.call_status != '' THEN excluded.last_call_at ELSE customer_interactions.last_call_at END
-                ''', (p, w, fw, e, c, su, it, poa, r, f, ec, now_call_at))
+                ''', (p, w, fw, e, c, su, it, poa, r, f, ec, final_last_call))
             conn.commit()
 def render_telecalling_analytics(conn):
     st.markdown("### 📞 Telecalling Analytics & Performance (Sept 2 - Today)")
