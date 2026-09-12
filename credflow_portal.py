@@ -36,6 +36,36 @@ if PERSISTENT_DB != REPO_DB:
             shutil.copy2(REPO_DB, PERSISTENT_DB)
         except Exception:
             pass
+    elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
+        # Sync any missing interaction records from repo DB to persistent DB
+        try:
+            p_conn = sqlite3.connect(PERSISTENT_DB, timeout=10.0)
+            r_conn = sqlite3.connect(REPO_DB, timeout=10.0)
+            r_df = pd.read_sql("SELECT * FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '') OR (follow_up IS NOT NULL AND follow_up != '')", r_conn)
+            r_conn.close()
+            
+            p_existing = [r[0] for r in p_conn.execute("SELECT phone FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '')").fetchall()]
+            
+            for _, r_row in r_df.iterrows():
+                p = str(r_row.get('phone', ''))
+                if p and p not in p_existing:
+                    c = str(r_row.get('call_status', ''))
+                    su = str(r_row.get('status_update', ''))
+                    it = str(r_row.get('issue_type', ''))
+                    poa = str(r_row.get('plan_of_action', ''))
+                    rem = str(r_row.get('remarks', ''))
+                    fu = str(r_row.get('follow_up', ''))
+                    l_at = str(r_row.get('last_call_at', ''))
+                    
+                    p_conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
+                    p_conn.execute('''
+                        INSERT INTO customer_interactions (phone, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, last_call_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (p, c, su, it, poa, rem, fu, l_at))
+            p_conn.commit()
+            p_conn.close()
+        except Exception:
+            pass
 
 DB_PATH = PERSISTENT_DB if os.path.exists(PERSISTENT_DB) else REPO_DB
 if not os.path.exists(DB_PATH) and os.path.exists(r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"):
@@ -2302,7 +2332,7 @@ def render_telecalling_analytics(conn):
             def _parse_call_date(row):
                 l_at = str(row.get('last_call_at', '')).strip()
                 if len(l_at) >= 10:
-                    p_dt = pd.to_datetime(l_at[:10], errors='coerce')
+                    p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
                     if pd.notna(p_dt): return p_dt.date()
                 f_up = str(row.get('follow_up', '')).strip()
                 if f_up and f_up.lower() not in ['none', 'nat', 'nan', '']:
