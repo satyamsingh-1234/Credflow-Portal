@@ -2350,12 +2350,17 @@ def render_telecalling_analytics(conn):
             col_date, col_space = st.columns([3, 1])
             with col_date:
                 available_dates = sorted(valid_calls_df['call_date'].unique(), reverse=True)
-                default_sel = today_d if today_d in available_dates else (available_dates[0] if len(available_dates) > 0 else today_d)
+                max_avail_date = max(available_dates) if available_dates else today_d
+                min_avail_date = min(available_dates) if available_dates else sept2_d
+                min_date_val = min(sept2_d, min_avail_date)
+                max_date_val = max(today_d, max_avail_date)
+                
+                default_sel = today_d if (today_d in available_dates or min_date_val <= today_d <= max_date_val) else (available_dates[0] if available_dates else today_d)
                 selected_date = st.date_input(
                     "🗓️ Select Specific Date to Inspect / Edit Calls",
                     value=default_sel,
-                    min_value=sept2_d,
-                    max_value=today_d,
+                    min_value=min_date_val,
+                    max_value=max_date_val,
                     key="tele_date_picker"
                 )
             
