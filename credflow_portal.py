@@ -696,9 +696,17 @@ st.markdown("""
         animation: appEntrance 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
 
-    @keyframes appEntrance {
-        0% { opacity: 0.7; transform: scale(0.994) translateY(4px); }
-        100% { opacity: 1; transform: scale(1) translateY(0); }
+    /* 6. Neon Glow & Pulse on Top Header Running Man Icon */
+    header [data-testid="stHeader"] img,
+    header [data-testid="stHeader"] svg {
+        filter: drop-shadow(0 0 6px #2563EB) invert(15%) sepia(90%) saturate(2000%) hue-rotate(210deg) !important;
+        animation: neonPulse 1s infinite ease-in-out !important;
+    }
+
+    @keyframes neonPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.3); filter: drop-shadow(0 0 10px #10B981); }
+        100% { transform: scale(1); }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -3292,25 +3300,30 @@ tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 ])
 
 with tab_dash:
-    import pandas as pd
-    s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
-    if not s_batches.empty:
-        hist_df = fetch_all_history()
-        render_dashboard(hist_df, "dash_master")
-    else:
-        st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
+    with st.spinner("⚡ Processing & Loading CredFlow Dashboard..."):
+        import pandas as pd
+        s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+        if not s_batches.empty:
+            hist_df = fetch_all_history()
+            render_dashboard(hist_df, "dash_master")
+        else:
+            st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
 
 with tab_tele:
-    render_telecalling_analytics(conn)
+    with st.spinner("📞 Loading Telecalling Performance & Analytics..."):
+        render_telecalling_analytics(conn)
 
 with tab_comp:
-    render_batch_comparison(conn)
+    with st.spinner("⚔️ Calculating Batch Comparison Metrics..."):
+        render_batch_comparison(conn)
 
 with tab_hist:
-    render_outreach_history(conn)
+    with st.spinner("📜 Fetching Outreach & Dispatch Logs..."):
+        render_outreach_history(conn)
 
 with tab_tpl:
-    render_template_manager(conn)
+    with st.spinner("📝 Loading Outreach Templates Manager..."):
+        render_template_manager(conn)
 
 with tab_upload:
     if not is_admin:
