@@ -23,16 +23,14 @@ st.set_page_config(
 )
 
 # ── DATABASE SETUP ──
-LOCAL_DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
-if os.path.exists(LOCAL_DB_PATH):
-    DB_PATH = LOCAL_DB_PATH
-else:
-    DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
+DB_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
+if not os.path.exists(DB_PATH) and os.path.exists(r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"):
+    DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
 
-conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
+conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=60.0)
 try:
     conn.execute('PRAGMA journal_mode=DELETE;')
-    conn.execute('PRAGMA busy_timeout=30000;')
+    conn.execute('PRAGMA busy_timeout=60000;')
 except Exception:
     pass
 
