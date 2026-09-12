@@ -2332,12 +2332,20 @@ def render_telecalling_analytics(conn):
             def _parse_call_date(row):
                 l_at = str(row.get('last_call_at', '')).strip()
                 if len(l_at) >= 10:
-                    p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
-                    if pd.notna(p_dt): return p_dt.date()
+                    if l_at[4] == '-' and l_at[7] == '-':
+                        p_dt = pd.to_datetime(l_at[:10], errors='coerce', format='%Y-%m-%d')
+                        if pd.notna(p_dt): return p_dt.date()
+                    else:
+                        p_dt = pd.to_datetime(l_at[:10], errors='coerce', dayfirst=True)
+                        if pd.notna(p_dt): return p_dt.date()
                 f_up = str(row.get('follow_up', '')).strip()
                 if f_up and f_up.lower() not in ['none', 'nat', 'nan', '']:
-                    p_dt = pd.to_datetime(f_up, errors='coerce', dayfirst=True)
-                    if pd.notna(p_dt): return p_dt.date()
+                    if len(f_up) >= 10 and f_up[4] == '-' and f_up[7] == '-':
+                        p_dt = pd.to_datetime(f_up[:10], errors='coerce', format='%Y-%m-%d')
+                        if pd.notna(p_dt): return p_dt.date()
+                    else:
+                        p_dt = pd.to_datetime(f_up, errors='coerce', dayfirst=True)
+                        if pd.notna(p_dt): return p_dt.date()
                 return None
 
             interactions_df['call_date'] = interactions_df.apply(_parse_call_date, axis=1)
