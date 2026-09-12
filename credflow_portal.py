@@ -617,57 +617,88 @@ st.markdown("""
     }
 
     /* Alert Boxes */
-    /* ── STYLISH CREDFLOW TOP LOADING BAR & DECORATION ── */
+    /* ── MAZEDAAR & FUTURISTIC RELOAD LOADING ANIMATION ── */
+    
+    /* 1. Neon Glowing Laser Top Loading Bar */
     #stDecoration {
-        background: linear-gradient(90deg, #2563EB, #10B981, #6366F1, #F59E0B, #2563EB) !important;
-        background-size: 300% 100% !important;
-        height: 4px !important;
-        animation: topBarLoading 2s linear infinite !important;
-    }
-
-    @keyframes topBarLoading {
-        0% { background-position: 0% 0%; }
-        100% { background-position: 100% 0%; }
-    }
-
-    /* Multi-color Animated Spinners */
-    .stSpinner > div {
-        border-top-color: #3B82F6 !important;
-        border-right-color: #10B981 !important;
-        border-bottom-color: #F59E0B !important;
-        border-left-color: #6366F1 !important;
-        border-width: 4px !important;
-        border-style: solid !important;
-        border-radius: 50% !important;
-        animation: smoothSpin 0.75s linear infinite !important;
-    }
-
-    @keyframes smoothSpin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    /* Shimmering Skeleton Loader during Tab/Data Reload */
-    [data-testid="stSkeleton"] {
-        background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%) !important;
+        background: linear-gradient(90deg, #3B82F6, #10B981, #EC4899, #8B5CF6, #3B82F6) !important;
         background-size: 200% 100% !important;
-        animation: shimmerLoader 1.4s infinite !important;
-        border-radius: 8px !important;
+        height: 5px !important;
+        box-shadow: 0 2px 10px rgba(59, 130, 246, 0.6) !important;
+        animation: laserBeam 1.5s linear infinite !important;
     }
 
-    @keyframes shimmerLoader {
+    @keyframes laserBeam {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    /* 2. Super Cool Floating Glassmorphism Spinner Container */
+    .stSpinner {
+        background: rgba(15, 23, 42, 0.85) !important;
+        backdrop-filter: blur(12px) !important;
+        -webkit-backdrop-filter: blur(12px) !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        border-radius: 16px !important;
+        padding: 16px 24px !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 0 20px rgba(56, 189, 248, 0.3) !important;
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 14px !important;
+        animation: floatPulse 1.8s ease-in-out infinite !important;
+        margin: 12px 0 !important;
+    }
+
+    @keyframes floatPulse {
+        0% { transform: translateY(0px); box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 0 15px rgba(56,189,248,0.2); }
+        50% { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(0,0,0,0.3), 0 0 25px rgba(56,189,248,0.5); }
+        100% { transform: translateY(0px); box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 0 15px rgba(56,189,248,0.2); }
+    }
+
+    /* 3. Futuristic Rotating Cyber Loader Icon inside stSpinner */
+    .stSpinner > div {
+        width: 32px !important;
+        height: 32px !important;
+        border: 3.5px solid transparent !important;
+        border-top-color: #38BDF8 !important;
+        border-right-color: #34D399 !important;
+        border-bottom-color: #F472B6 !important;
+        border-left-color: #A78BFA !important;
+        border-radius: 50% !important;
+        animation: cyberSpin 0.7s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite !important;
+        filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.8)) !important;
+    }
+
+    @keyframes cyberSpin {
+        0% { transform: rotate(0deg) scale(0.95); }
+        50% { transform: rotate(180deg) scale(1.1); }
+        100% { transform: rotate(360deg) scale(0.95); }
+    }
+
+    /* 4. High-Tech Shimmering Skeleton Cards */
+    [data-testid="stSkeleton"] {
+        background: linear-gradient(90deg, #CBD5E1 25%, #F1F5F9 50%, #CBD5E1 75%) !important;
+        background-size: 200% 100% !important;
+        animation: cyberSkeleton 1.2s infinite !important;
+        border-radius: 12px !important;
+    }
+
+    @keyframes cyberSkeleton {
         0% { background-position: 200% 0; }
         100% { background-position: -200% 0; }
     }
 
-    /* Smooth Content Fade-In on Page Load / Reload */
-    .stApp > div {
-        animation: fadeInPage 0.35s ease-out !important;
+    /* 5. Smooth Page Entrance / Refresh Bounce Fade-In */
+    .stApp main {
+        animation: appEntrance 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
     }
 
-    @keyframes fadeInPage {
-        from { opacity: 0.85; transform: translateY(2px); }
-        to { opacity: 1; transform: translateY(0); }
+    @keyframes appEntrance {
+        0% { opacity: 0.7; transform: scale(0.994) translateY(4px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
     }
 </style>
 """, unsafe_allow_html=True)
