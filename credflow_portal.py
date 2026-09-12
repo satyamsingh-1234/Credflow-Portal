@@ -616,10 +616,17 @@ st.markdown("""
         border-color: #94A3B8 !important;
     }
 
-    /* Alert Boxes */
-    div[data-testid="stAlert"] {
-        border-radius: 10px !important;
-        border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    /* Clean Top Loading Progress Bar */
+    #stDecoration {
+        background: linear-gradient(90deg, #2563EB, #10B981, #3B82F6) !important;
+        background-size: 200% 100% !important;
+        height: 3.5px !important;
+        animation: topLoadingBar 1.5s linear infinite !important;
+    }
+
+    @keyframes topLoadingBar {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -3213,25 +3220,30 @@ tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 ])
 
 with tab_dash:
-    import pandas as pd
-    s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
-    if not s_batches.empty:
-        hist_df = fetch_all_history()
-        render_dashboard(hist_df, "dash_master")
-    else:
-        st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
+    with st.spinner("⏳ Loading Dashboard Data..."):
+        import pandas as pd
+        s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+        if not s_batches.empty:
+            hist_df = fetch_all_history()
+            render_dashboard(hist_df, "dash_master")
+        else:
+            st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
 
 with tab_tele:
-    render_telecalling_analytics(conn)
+    with st.spinner("⏳ Loading Telecalling Performance..."):
+        render_telecalling_analytics(conn)
 
 with tab_comp:
-    render_batch_comparison(conn)
+    with st.spinner("⏳ Calculating Batch Comparison..."):
+        render_batch_comparison(conn)
 
 with tab_hist:
-    render_outreach_history(conn)
+    with st.spinner("⏳ Fetching Outreach History..."):
+        render_outreach_history(conn)
 
 with tab_tpl:
-    render_template_manager(conn)
+    with st.spinner("⏳ Loading Templates..."):
+        render_template_manager(conn)
 
 with tab_upload:
     if not is_admin:
