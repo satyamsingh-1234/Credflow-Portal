@@ -1347,15 +1347,6 @@ def render_dashboard(df_sales, prefix):
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
     usage_opts = ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢", "No Data (Not Uploaded)"]
     
-    # URL Memory
-    q_search = st.query_params.get(f"q_search_{prefix}", "")
-    
-    q_plans_str = st.query_params.get(f"q_plan_{prefix}", "")
-    q_plans = [p for p in q_plans_str.split("||") if p in all_plans] if q_plans_str else []
-    
-    q_usage_str = st.query_params.get(f"q_usage_{prefix}", "")
-    q_usage = [u for u in q_usage_str.split("||") if u in usage_opts] if q_usage_str else []
-    
     # ── TOP DATE / COHORT DROPDOWN FILTER ──
     dp_opts = [
         "Overall Data (All Cohorts Combined)",
@@ -1365,23 +1356,35 @@ def render_dashboard(df_sales, prefix):
         "Last 90 Days",
         "Custom Date Range..."
     ]
-    q_dp = st.query_params.get(f"q_dp_{prefix}", dp_opts[0])
-    if q_dp not in dp_opts: q_dp = dp_opts[0]
+
+    s_key = f"s_search_{prefix}"
+    if s_key not in st.session_state:
+        st.session_state[s_key] = st.query_params.get(f"q_search_{prefix}", "")
+
+    d_key = f"d_preset_select_{prefix}"
+    if d_key not in st.session_state:
+        q_dp = st.query_params.get(f"q_dp_{prefix}", dp_opts[0])
+        st.session_state[d_key] = q_dp if q_dp in dp_opts else dp_opts[0]
+
+    p_key = f"s_filt_{prefix}"
+    if p_key not in st.session_state:
+        q_plans_str = st.query_params.get(f"q_plan_{prefix}", "")
+        st.session_state[p_key] = [p for p in q_plans_str.split("||") if p in all_plans] if q_plans_str else []
+
+    u_key = f"u_filt_{prefix}"
+    if u_key not in st.session_state:
+        q_usage_str = st.query_params.get(f"q_usage_{prefix}", "")
+        st.session_state[u_key] = [u for u in q_usage_str.split("||") if u in usage_opts] if q_usage_str else []
 
     f_col1, f_col2, f_col3, f_col4 = st.columns([1.5, 1.8, 1.4, 1.4])
     with f_col1:
-        search_q = st.text_input("🔍 Search Name or Phone", value=q_search, key=f"s_search_{prefix}")
+        search_q = st.text_input("🔍 Search Name or Phone", key=s_key)
     with f_col2:
-        date_preset = st.selectbox(
-            "📅 Select Date / Cohort Filter",
-            options=dp_opts,
-            index=dp_opts.index(q_dp),
-            key=f"d_preset_select_{prefix}"
-        )
+        date_preset = st.selectbox("📅 Select Date / Cohort Filter", options=dp_opts, key=d_key)
     with f_col3:
-        plan_filt = st.multiselect("📊 Filter by Plan Name", options=all_plans, default=q_plans, key=f"s_filt_{prefix}")
+        plan_filt = st.multiselect("📊 Filter by Plan Name", options=all_plans, key=p_key)
     with f_col4:
-        usage_filt = st.multiselect("🚦 Filter by Usage Health", options=usage_opts, default=q_usage, key=f"u_filt_{prefix}")
+        usage_filt = st.multiselect("🚦 Filter by Usage Health", options=usage_opts, key=u_key)
 
     custom_start_end = None
     if "Custom Date Range" in date_preset:
@@ -1892,28 +1895,32 @@ def render_crm(cx_df):
         em_opts = ["All", "Sent ✅", "Not Sent ❌"]
         dt_opts = ["All Dates 🌐", "Today 📌", "Tomorrow ⏩", "Overdue / Missed ⚠️", "Has Follow-up Set 📅", "No Follow-up 🚫", "Custom Date Range 📆"]
 
-        q_wa = st.query_params.get("q_flt_wa", wa_opts[0])
-        if q_wa not in wa_opts: q_wa = wa_opts[0]
+        if "flt_wa" not in st.session_state:
+            q_wa = st.query_params.get("q_flt_wa", wa_opts[0])
+            st.session_state["flt_wa"] = q_wa if q_wa in wa_opts else wa_opts[0]
 
-        q_fwa = st.query_params.get("q_flt_fwa", fwa_opts[0])
-        if q_fwa not in fwa_opts: q_fwa = fwa_opts[0]
+        if "flt_fwa" not in st.session_state:
+            q_fwa = st.query_params.get("q_flt_fwa", fwa_opts[0])
+            st.session_state["flt_fwa"] = q_fwa if q_fwa in fwa_opts else fwa_opts[0]
 
-        q_em = st.query_params.get("q_flt_em", em_opts[0])
-        if q_em not in em_opts: q_em = em_opts[0]
+        if "flt_em" not in st.session_state:
+            q_em = st.query_params.get("q_flt_em", em_opts[0])
+            st.session_state["flt_em"] = q_em if q_em in em_opts else em_opts[0]
 
-        q_dt = st.query_params.get("q_flt_date", dt_opts[0])
-        if q_dt not in dt_opts: q_dt = dt_opts[0]
+        if "flt_date" not in st.session_state:
+            q_dt = st.query_params.get("q_flt_date", dt_opts[0])
+            st.session_state["flt_date"] = q_dt if q_dt in dt_opts else dt_opts[0]
 
         # --- New WA, Email & Date Filters ---
         filt_c1, filt_c2, filt_c3, filt_c4 = st.columns(4)
         with filt_c1:
-            wa_filter = st.selectbox("🎯 Filter by WA API Sent", wa_opts, index=wa_opts.index(q_wa), key="flt_wa")
+            wa_filter = st.selectbox("🎯 Filter by WA API Sent", wa_opts, key="flt_wa")
         with filt_c2:
-            free_wa_filter = st.selectbox("🎯 Filter by Free WA Sent", fwa_opts, index=fwa_opts.index(q_fwa), key="flt_fwa")
+            free_wa_filter = st.selectbox("🎯 Filter by Free WA Sent", fwa_opts, key="flt_fwa")
         with filt_c3:
-            em_filter = st.selectbox("🎯 Filter by Email Sent", em_opts, index=em_opts.index(q_em), key="flt_em")
+            em_filter = st.selectbox("🎯 Filter by Email Sent", em_opts, key="flt_em")
         with filt_c4:
-            date_filter = st.selectbox("📅 Filter by Follow-up Date", dt_opts, index=dt_opts.index(q_dt), key="flt_date")
+            date_filter = st.selectbox("📅 Filter by Follow-up Date", dt_opts, key="flt_date")
 
         # Commented out because modifying global query_params triggers a full app rerun instead of just the fragment
         # if wa_filter != q_wa: st.query_params["q_flt_wa"] = wa_filter
@@ -2349,17 +2356,20 @@ def render_batch_comparison(conn):
         st.warning("⚠️ Comparison requires at least 2 upload batches in history. Please upload another batch or select another dataset.")
         return
         
-    b_col1, b_col2 = st.columns(2)
-    q_b_old = st.query_params.get("q_batch_old", "")
-    q_b_new = st.query_params.get("q_batch_new", "")
-    
-    idx_old = batch_list.index(q_b_old) if q_b_old in batch_list else min(1, len(batch_list)-1)
-    idx_new = batch_list.index(q_b_new) if q_b_new in batch_list else 0
+    if "cmp_batch_old" not in st.session_state:
+        q_b_old = st.query_params.get("q_batch_old", "")
+        idx_old = batch_list.index(q_b_old) if q_b_old in batch_list else min(1, len(batch_list)-1)
+        st.session_state["cmp_batch_old"] = batch_list[idx_old]
+
+    if "cmp_batch_new" not in st.session_state:
+        q_b_new = st.query_params.get("q_batch_new", "")
+        idx_new = batch_list.index(q_b_new) if q_b_new in batch_list else 0
+        st.session_state["cmp_batch_new"] = batch_list[idx_new]
 
     with b_col1:
-        batch_old = st.selectbox("📌 Select Baseline Batch (Batch A / Older)", batch_list, index=idx_old, key="cmp_batch_old")
+        batch_old = st.selectbox("📌 Select Baseline Batch (Batch A / Older)", batch_list, key="cmp_batch_old")
     with b_col2:
-        batch_new = st.selectbox("🎯 Select Comparison Batch (Batch B / Newer)", batch_list, index=idx_new, key="cmp_batch_new")
+        batch_new = st.selectbox("🎯 Select Comparison Batch (Batch B / Newer)", batch_list, key="cmp_batch_new")
         
     # if batch_old != q_b_old: st.query_params["q_batch_old"] = batch_old
     # if batch_new != q_b_new: st.query_params["q_batch_new"] = batch_new
