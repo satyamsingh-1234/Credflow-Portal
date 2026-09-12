@@ -2265,8 +2265,8 @@ def render_crm(cx_df):
         diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
         diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
 
-        f_ui = pd.to_datetime(ui_display_df['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
-        f_ed = pd.to_datetime(edited_df['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+        f_ui = pd.to_datetime(ui_display_df['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
+        f_ed = pd.to_datetime(edited_df['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
         diff_follow = f_ui != f_ed
 
         diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
@@ -2283,7 +2283,7 @@ def render_crm(cx_df):
                 it = str(row.get('Issue Type', ''))
                 poa = str(row.get('Plan of Action', ''))
                 r = str(row['Remarks'])
-                f_val = row['Follow-up Date']
+                f_val = row.get('Call Date', None)
                 f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
                 e = 1 if row['📨 Email Sent'] else 0
                 ec = int(row['Extra Credits']) if str(row['Extra Credits']).strip() not in ['', 'nan', 'None'] else 0
@@ -2604,7 +2604,7 @@ def render_batch_comparison(conn):
         'call_status': 'Call Status',
         'issue_type': 'Issue Type',
         'remarks': 'Remarks',
-        'follow_up': 'Follow-up Date'
+        'follow_up': 'Call Date'
     })
 
     def _get_health_rank(h_str):
@@ -2621,7 +2621,7 @@ def render_batch_comparison(conn):
     degraded = merged[merged['rank_b'] < merged['rank_a']].copy()
 
     st.markdown("#### 🔄 Customer Migration & Movement Analysis")
-    st.info("💡 **Interactive Call Notes**: Aap is list mein kisi bhi customer ka **Call Status**, **Remarks / Notes**, aur **Follow-up Date** direct edit karke auto-save kar sakte hain.")
+    st.info("💡 **Interactive Call Notes**: Aap is list mein kisi bhi customer ka **Call Status**, **Remarks / Notes**, aur **Call Date** direct edit karke auto-save kar sakte hain.")
 
     m_col1, m_col2 = st.columns(2)
     m_col1.success(f"🎉 **{len(upgraded)} Customers Upgraded (Usage Improved 🟢)**")
@@ -2629,7 +2629,7 @@ def render_batch_comparison(conn):
 
     if not upgraded.empty:
         with st.expander("🟢 View Upgraded Customers List (Editable Notes & Call Status)", expanded=False):
-            upg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Follow-up Date']
+            upg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Call Date']
             upg_df_export = upgraded.reset_index(drop=True)
             
             # Select All Checkboxes
@@ -2638,34 +2638,22 @@ def render_batch_comparison(conn):
             with u_c2: sel_em_u = st.checkbox('📧 Select All Email', key='u_em')
             with u_c3: sel_fwa_u = st.checkbox('💬 Select All Free WA', key='u_fwa')
 
-            upg_df_export.insert(0, '✅ Send API', sel_api_u)
-            upg_df_export.insert(1, '📧 Send Email', sel_em_u)
-            upg_df_export.insert(2, '💬 Send Free WA', sel_fwa_u)
-            
-            # Helper: rename for generate_wa_link
-            temp_upg = upg_df_export.rename(columns={'Usage check (Batch B)': 'Usage check'})
-            upg_df_export.insert(3, 'WhatsApp', [generate_wa_link(row) for _, row in temp_upg.iterrows()])
-            
-            upg_bytes = to_excel_download(upg_df_export[[c for c in upg_cols if c in upg_df_export.columns]], sheet_name="Upgraded Customers")
-            st.download_button(
-                label=f"🟢 Download Upgraded Customers Excel ({len(upg_df_export)})",
-                data=upg_bytes,
-                file_name=f"CredFlow_Upgraded_Customers_{batch_old}_vs_{batch_new}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="btn_dl_upgraded"
-            )
-            
+            upg_df_export.insert(0, '📩 Send API', sel_api_u)
+            upg_df_export.insert(1, '📨 Send Email', sel_em_u)
+            upg_df_export.insert(2, '📱 Send Free WA', sel_fwa_u)
+
+            upg_existing = [c for c in ['📩 Send API', '📨 Send Email', '📱 Send Free WA'] + upg_cols if c in upg_df_export.columns]
+            upg_df_export = upg_df_export[upg_existing]
+
             upg_edited = st.data_editor(
                 upg_df_export,
-                key=f"ed_upg_{batch_old}_{batch_new}",
+                key="data_editor_upgraded_v1",
                 use_container_width=True,
                 hide_index=True,
-                column_order=['✅ Send API', '📧 Send Email', '💬 Send Free WA', 'WhatsApp'] + upg_cols,
                 column_config={
-                    "✅ Send API": st.column_config.CheckboxColumn("✅ Send API", default=False),
-                    "📧 Send Email": st.column_config.CheckboxColumn("📧 Send Email", default=False),
-                    "💬 Send Free WA": st.column_config.CheckboxColumn("💬 Send Free WA", default=False),
-                    "WhatsApp": st.column_config.LinkColumn("Open WhatsApp", display_text="Chat 💬"),
+                    "📩 Send API": st.column_config.CheckboxColumn("📩 Send API", default=False),
+                    "📨 Send Email": st.column_config.CheckboxColumn("📨 Send Email", default=False),
+                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
                     "Call Status": st.column_config.SelectboxColumn(
                         "Call Status 📞",
                         options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
@@ -2676,10 +2664,10 @@ def render_batch_comparison(conn):
                         options=[""] + [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()],
                         width="medium"
                     ),
-                    "Remarks": st.column_config.TextColumn("Remarks / Notes 📝", width="large"),
-                    "Follow-up Date": st.column_config.DateColumn("Follow-up Date 📅", format="DD/MM/YYYY")
+                    "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
+                    "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
                 },
-                disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)", "WhatsApp"]
+                disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)"]
             )
 
             # ── BULK ACTIONS (UPGRADED) ──
@@ -2792,8 +2780,8 @@ def render_batch_comparison(conn):
             diff_status = upg_df_export['Call Status'].fillna('').astype(str).str.strip() != upg_edited['Call Status'].fillna('').astype(str).str.strip()
             diff_issue = upg_df_export['Issue Type'].fillna('').astype(str).str.strip() != upg_edited['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in upg_df_export.columns and 'Issue Type' in upg_edited.columns else pd.Series(False, index=upg_df_export.index)
             diff_remarks = upg_df_export['Remarks'].fillna('').astype(str).str.strip() != upg_edited['Remarks'].fillna('').astype(str).str.strip()
-            f_ui = pd.to_datetime(upg_df_export['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
-            f_ed = pd.to_datetime(upg_edited['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+            f_ui = pd.to_datetime(upg_df_export['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in upg_df_export.columns else pd.Series('', index=upg_df_export.index)
+            f_ed = pd.to_datetime(upg_edited['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in upg_edited.columns else pd.Series('', index=upg_edited.index)
             diff_follow = f_ui != f_ed
 
             diff = diff_status | diff_issue | diff_remarks | diff_follow
@@ -2804,7 +2792,7 @@ def render_batch_comparison(conn):
                     c = str(row['Call Status'])
                     it = str(row.get('Issue Type', ''))
                     r = str(row['Remarks'])
-                    f_val = row['Follow-up Date']
+                    f_val = row.get('Call Date', None)
                     f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
                     
                     conn.execute('''
@@ -2821,7 +2809,7 @@ def render_batch_comparison(conn):
 
     if not degraded.empty:
         with st.expander("🔴 View Degraded Customers List (Editable Notes & Call Status)", expanded=False):
-            deg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Follow-up Date']
+            deg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Call Date']
             deg_df_export = degraded.reset_index(drop=True)
             
             # Select All Checkboxes
@@ -2830,34 +2818,22 @@ def render_batch_comparison(conn):
             with d_c2: sel_em_d = st.checkbox('📧 Select All Email', key='d_em')
             with d_c3: sel_fwa_d = st.checkbox('💬 Select All Free WA', key='d_fwa')
 
-            deg_df_export.insert(0, '✅ Send API', sel_api_d)
-            deg_df_export.insert(1, '📧 Send Email', sel_em_d)
-            deg_df_export.insert(2, '💬 Send Free WA', sel_fwa_d)
-            
-            # Helper: rename for generate_wa_link
-            temp_deg = deg_df_export.rename(columns={'Usage check (Batch B)': 'Usage check'})
-            deg_df_export.insert(3, 'WhatsApp', [generate_wa_link(row) for _, row in temp_deg.iterrows()])
-            
-            deg_bytes = to_excel_download(deg_df_export[[c for c in deg_cols if c in deg_df_export.columns]], sheet_name="Degraded Customers")
-            st.download_button(
-                label=f"🔴 Download Degraded Customers Excel ({len(deg_df_export)})",
-                data=deg_bytes,
-                file_name=f"CredFlow_Degraded_Customers_{batch_old}_vs_{batch_new}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="btn_dl_degraded"
-            )
-            
+            deg_df_export.insert(0, '📩 Send API', sel_api_d)
+            deg_df_export.insert(1, '📨 Send Email', sel_em_d)
+            deg_df_export.insert(2, '📱 Send Free WA', sel_fwa_d)
+
+            deg_existing = [c for c in ['📩 Send API', '📨 Send Email', '📱 Send Free WA'] + deg_cols if c in deg_df_export.columns]
+            deg_df_export = deg_df_export[deg_existing]
+
             deg_edited = st.data_editor(
                 deg_df_export,
-                key=f"ed_deg_{batch_old}_{batch_new}",
+                key="data_editor_degraded_v1",
                 use_container_width=True,
                 hide_index=True,
-                column_order=['✅ Send API', '📧 Send Email', '💬 Send Free WA', 'WhatsApp'] + deg_cols,
                 column_config={
-                    "✅ Send API": st.column_config.CheckboxColumn("✅ Send API", default=False),
-                    "📧 Send Email": st.column_config.CheckboxColumn("📧 Send Email", default=False),
-                    "💬 Send Free WA": st.column_config.CheckboxColumn("💬 Send Free WA", default=False),
-                    "WhatsApp": st.column_config.LinkColumn("Open WhatsApp", display_text="Chat 💬"),
+                    "📩 Send API": st.column_config.CheckboxColumn("📩 Send API", default=False),
+                    "📨 Send Email": st.column_config.CheckboxColumn("📨 Send Email", default=False),
+                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
                     "Call Status": st.column_config.SelectboxColumn(
                         "Call Status 📞",
                         options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
@@ -2868,10 +2844,10 @@ def render_batch_comparison(conn):
                         options=[""] + [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()],
                         width="medium"
                     ),
-                    "Remarks": st.column_config.TextColumn("Remarks / Notes 📝", width="large"),
-                    "Follow-up Date": st.column_config.DateColumn("Follow-up Date 📅", format="DD/MM/YYYY")
+                    "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
+                    "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
                 },
-                disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)", "WhatsApp"]
+                disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)"]
             )
 
             # ── BULK ACTIONS (DEGRADED) ──
@@ -2881,9 +2857,9 @@ def render_batch_comparison(conn):
             with deg_b3: btn_fw_d = st.button("💬 Send via Free WA", type="secondary", use_container_width=True, key="btn_fw_d")
 
             if btn_wa_d:
-                selected_wa_d = deg_edited[deg_edited['✅ Send API'] == True]
+                selected_wa_d = deg_edited[deg_edited['📩 Send API'] == True]
                 if selected_wa_d.empty:
-                    st.warning("Pehle table mein se '✅ Send API' check box tick karein.")
+                    st.warning("Pehle table mein se '📩 Send API' check box tick karein.")
                 else:
                     success_count = 0
                     error_count = 0
@@ -2917,9 +2893,9 @@ def render_batch_comparison(conn):
                         st.rerun()
 
             if btn_em_d:
-                selected_em_d = deg_edited[deg_edited['📧 Send Email'] == True].copy()
+                selected_em_d = deg_edited[deg_edited['📨 Send Email'] == True].copy()
                 if selected_em_d.empty:
-                    st.warning("Pehle table mein se '📧 Send Email' check box tick karein.")
+                    st.warning("Pehle table mein se '📨 Send Email' check box tick karein.")
                 else:
                     selected_em_d['Usage check'] = selected_em_d['Usage check (Batch B)']
                     selected_rows_data = selected_em_d.to_dict('records')
@@ -2942,9 +2918,9 @@ def render_batch_comparison(conn):
 
             if btn_fw_d:
                 import webbrowser, time, pyautogui
-                selected_fwa_d = deg_edited[deg_edited['💬 Send Free WA'] == True]
+                selected_fwa_d = deg_edited[deg_edited['📱 Send Free WA'] == True]
                 if selected_fwa_d.empty:
-                    st.warning("Pehle table mein se '💬 Send Free WA' check box tick karein.")
+                    st.warning("Pehle table mein se '📱 Send Free WA' check box tick karein.")
                 else:
                     st.warning(f"⚠️ AUTO-SENDING WhatsApp for {len(selected_fwa_d)} customers. KRIPYA APNE MOUSE AUR KEYBOARD KO HAATH NA LAGAYEIN!")
                     success_count = 0
@@ -2984,8 +2960,8 @@ def render_batch_comparison(conn):
             diff_status = deg_df_export['Call Status'].fillna('').astype(str).str.strip() != deg_edited['Call Status'].fillna('').astype(str).str.strip()
             diff_issue = deg_df_export['Issue Type'].fillna('').astype(str).str.strip() != deg_edited['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in deg_df_export.columns and 'Issue Type' in deg_edited.columns else pd.Series(False, index=deg_df_export.index)
             diff_remarks = deg_df_export['Remarks'].fillna('').astype(str).str.strip() != deg_edited['Remarks'].fillna('').astype(str).str.strip()
-            f_ui = pd.to_datetime(deg_df_export['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
-            f_ed = pd.to_datetime(deg_edited['Follow-up Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+            f_ui = pd.to_datetime(deg_df_export['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in deg_df_export.columns else pd.Series('', index=deg_df_export.index)
+            f_ed = pd.to_datetime(deg_edited['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in deg_edited.columns else pd.Series('', index=deg_edited.index)
             diff_follow = f_ui != f_ed
 
             diff = diff_status | diff_issue | diff_remarks | diff_follow
@@ -2996,7 +2972,7 @@ def render_batch_comparison(conn):
                     c = str(row['Call Status'])
                     it = str(row.get('Issue Type', ''))
                     r = str(row['Remarks'])
-                    f_val = row['Follow-up Date']
+                    f_val = row.get('Call Date', None)
                     f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
                     
                     conn.execute('''
