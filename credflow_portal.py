@@ -628,6 +628,22 @@ st.markdown("""
         0% { background-position: 0% 0%; }
         100% { background-position: 200% 0%; }
     }
+
+    /* Stylish Horizontal Loading Pill Badge */
+    .stSpinner {
+        background: linear-gradient(135deg, #EFF6FF 0%, #F0FDF4 100%) !important;
+        border: 1px solid #BFDBFE !important;
+        border-radius: 12px !important;
+        padding: 12px 20px !important;
+        margin: 12px 0 !important;
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08) !important;
+    }
+    .stSpinner > div {
+        border-top-color: #2563EB !important;
+        border-right-color: #10B981 !important;
+        border-bottom-color: #F59E0B !important;
+        border-left-color: #6366F1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -3220,7 +3236,7 @@ tab_dash, tab_tele, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 ])
 
 with tab_dash:
-    with st.spinner("⏳ Loading Dashboard Data..."):
+    with st.spinner("📊 Analyzing Customer Usage Health Matrix & Live CRM Analytics..."):
         import pandas as pd
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
         if not s_batches.empty:
@@ -3230,26 +3246,27 @@ with tab_dash:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
 
 with tab_tele:
-    with st.spinner("⏳ Loading Telecalling Performance..."):
+    with st.spinner("📞 Computing Daily Telecalling Performance & Call Interaction Metrics..."):
         render_telecalling_analytics(conn)
 
 with tab_comp:
-    with st.spinner("⏳ Calculating Batch Comparison..."):
+    with st.spinner("⚔️ Calculating Cohort Comparison & Adoption Growth Rates..."):
         render_batch_comparison(conn)
 
 with tab_hist:
-    with st.spinner("⏳ Fetching Outreach History..."):
+    with st.spinner("📜 Retrieving WhatsApp & Email Outreach Dispatch Logs..."):
         render_outreach_history(conn)
 
 with tab_tpl:
-    with st.spinner("⏳ Loading Templates..."):
+    with st.spinner("📝 Loading Interakt WA & Email Outreach Templates..."):
         render_template_manager(conn)
 
 with tab_upload:
-    if not is_admin:
-        st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
-    else:
-        action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
+    with st.spinner("⚙️ Loading Master Data Management & Upload Controls..."):
+        if not is_admin:
+            st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
+        else:
+            action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
 
         if action == "📤 Upload New Master Data":
             st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
