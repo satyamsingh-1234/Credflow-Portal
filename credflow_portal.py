@@ -2272,25 +2272,10 @@ def render_telecalling_analytics(conn):
     sept2_d = date(2026, 9, 2)
     today_str = today_d.strftime("%Y-%m-%d")
     
-    col_date, col_space = st.columns([3, 1])
-    with col_date:
-        selected_date = st.date_input(
-            "🗓️ Select Specific Date to Inspect / Edit Calls",
-            value=today_d,
-            min_value=sept2_d,
-            max_value=today_d,
-            key="tele_date_picker"
-        )
-    
-    sel_date_str = selected_date.strftime("%Y-%m-%d")
-    sel_date_dmy = selected_date.strftime("%d/%m/%Y")
-    
-    # Query customer interactions
+    # Query customer interactions with logged call status
     interactions_df = pd.read_sql("""
         SELECT * FROM customer_interactions 
-        WHERE (call_status IS NOT NULL AND call_status != '')
-           OR (remarks IS NOT NULL AND remarks != '')
-           OR (follow_up IS NOT NULL AND follow_up != '')
+        WHERE call_status IS NOT NULL AND call_status != ''
     """, conn)
     
     if not interactions_df.empty:
@@ -2304,23 +2289,33 @@ def render_telecalling_analytics(conn):
             if f_up and f_up.lower() not in ['none', 'nat', 'nan', '']:
                 p_dt = pd.to_datetime(f_up, errors='coerce', dayfirst=True)
                 if pd.notna(p_dt): return p_dt.date()
-            return today_d
+            return None
 
-        interactions_df['parsed_call_date'] = interactions_df.apply(_parse_call_date, axis=1)
+        interactions_df['call_date'] = interactions_df.apply(_parse_call_date, axis=1)
+        valid_calls_df = interactions_df[interactions_df['call_date'].notna()].copy()
+
+        # ── OVERALL SUMMARY BAR CHART & TABLE ──
+        daily_summary = valid_calls_df.groupby('call_date').size().reset_index(name='Total Calls')
+        daily_summary['Date_Formatted'] = pd.to_datetime(daily_summary['call_date']).dt.strftime('%d %b %Y (%a)')
+
+        col_date, col_space = st.columns([3, 1])
+        with col_date:
+            available_dates = sorted(valid_calls_df['call_date'].unique(), reverse=True)
+            default_sel = today_d if today_d in available_dates else (available_dates[0] if len(available_dates) > 0 else today_d)
+            selected_date = st.date_input(
+                "🗓️ Select Specific Date to Inspect / Edit Calls",
+                value=default_sel,
+                min_value=sept2_d,
+                max_value=today_d,
+                key="tele_date_picker"
+            )
+        
+        sel_date_str = selected_date.strftime("%Y-%m-%d")
         
         # ── 1. SELECTED DATE METRICS ──
-        date_calls_df = interactions_df[
-            (interactions_df['parsed_call_date'] == selected_date) |
-            (interactions_df['last_call_at'].fillna('').astype(str).str.startswith(sel_date_str)) |
-            (interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_str)) |
-            (interactions_df['follow_up'].fillna('').astype(str).str.contains(sel_date_dmy))
-        ]
+        date_calls_df = valid_calls_df[valid_calls_df['call_date'] == selected_date]
         
-        if date_calls_df.empty and selected_date == today_d:
-            date_calls_df = interactions_df
-            
         total_calls = len(date_calls_df)
-        total_all_calls = len(interactions_df)
         
         connected_statuses = ["Connected", "Interested", "Converted", "Payment Pending"]
         callback_statuses = ["Call Later", "Call Back Requested", "Busy", "Ringing"]
@@ -2338,6 +2333,27 @@ def render_telecalling_analytics(conn):
         k4.metric("🔴 Not Picked / Unreachable", f"{calls_unreachable}", delta=f"{round(calls_unreachable/total_calls*100)}%" if total_calls else "0%", delta_color="inverse")
         
         st.markdown("---")
+
+        # ── 2. DAILY CALL VOLUME TREND & SUMMARY TABLE ──
+        c_trend, c_tbl = st.columns([2, 1])
+        with c_trend:
+            fig_trend = px.bar(
+                daily_summary,
+                x='Date_Formatted',
+                y='Total Calls',
+                text='Total Calls',
+                title='📅 Daily Telecalling Volume Breakdown (Sept 2 - Present)',
+                color='Total Calls',
+                color_continuous_scale='Blues'
+            )
+            fig_trend.update_traces(textposition='outside')
+            fig_trend.update_layout(height=320, margin=dict(t=40, b=20, l=20, r=20), showlegend=False)
+            st.plotly_chart(fig_trend, use_container_width=True)
+        with c_tbl:
+            st.markdown("#### 📊 Date-Wise Call Totals")
+            st.dataframe(daily_summary[['Date_Formatted', 'Total Calls']], use_container_width=True, hide_index=True)
+
+        st.markdown("---")
         
         # ── 3. DETAILED LOG FOR SELECTED DATE ──
         st.markdown(f"#### 📋 Detailed Call Log for {selected_date.strftime('%d %b %Y')}")
@@ -2348,7 +2364,7 @@ def render_telecalling_analytics(conn):
             excel_tele = to_excel_download(date_calls_df[show_cols], sheet_name="Telecalling_Log")
             st.download_button("📥 Export Selected Date Call Log (Excel)", data=excel_tele, file_name=f"Telecalling_Log_{sel_date_str}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
         else:
-            st.info(f"ℹ️ No calls logged on {sel_date_str} yet. Select another date or update call status in main dashboard.")
+            st.info(f"ℹ️ No calls logged on {selected_date.strftime('%d %b %Y')} yet. Select another date above to view past call logs.")
     else:
         st.info("ℹ️ No telecalling interactions recorded yet. As agents update call statuses, metrics will appear here.")
 
