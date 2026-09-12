@@ -2366,6 +2366,7 @@ def render_batch_comparison(conn):
         idx_new = batch_list.index(q_b_new) if q_b_new in batch_list else 0
         st.session_state["cmp_batch_new"] = batch_list[idx_new]
 
+    b_col1, b_col2 = st.columns(2)
     with b_col1:
         batch_old = st.selectbox("📌 Select Baseline Batch (Batch A / Older)", batch_list, key="cmp_batch_old")
     with b_col2:
