@@ -1556,11 +1556,11 @@ def render_dashboard(df_sales, prefix):
 
     filtered_export = filtered.copy()
     if 'phone' in filtered_export.columns:
-        filtered_export['merge_phone'] = filtered_export['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        filtered_export['phone'] = filtered_export['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         db_cols_to_drop = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'last_call_at', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
         filtered_export = filtered_export.drop(columns=[c for c in db_cols_to_drop if c in filtered_export.columns], errors='ignore')
         inter_cols = [c for c in ['phone', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in interactions_dash.columns]
-        filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], left_on='merge_phone', right_on='phone', how='left')
+        filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], on='phone', how='left')
 
     # ── OVERALL DASHBOARD ──────────────────────────────────────────────
     st.markdown("---")
@@ -1580,10 +1580,10 @@ def render_dashboard(df_sales, prefix):
     proper_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
     no_data = unique_cx - no_usage - low_usage - proper_usage
 
-    dash_df['merge_phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+    dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
     dash_df = dash_df.drop(columns=[c for c in db_cols_dash if c in dash_df.columns], errors='ignore')
-    dash_merged = pd.merge(dash_df, interactions_dash, left_on='merge_phone', right_on='phone', how='left')
+    dash_merged = pd.merge(dash_df, interactions_dash, on='phone', how='left')
 
     wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
     free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
@@ -1902,15 +1902,15 @@ def render_crm(cx_df):
         call_df['phone'] = call_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         call_df['WhatsApp'] = call_df.apply(generate_wa_link, axis=1)
 
-        call_df['merge_phone'] = call_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        call_df['phone'] = call_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         interactions_df['phone'] = interactions_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         interactions_df = interactions_df.drop_duplicates(subset=['phone'], keep='last')
 
         db_cols_crm = ['call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'wa_sent', 'free_wa_sent', 'email_sent', 'extra_credits', 'status_update', 'last_call_at', 'Call Status', 'Remarks', 'Call Date', 'Issue Type', 'Plan of Action']
         call_df = call_df.drop(columns=[c for c in db_cols_crm if c in call_df.columns], errors='ignore')
 
-        call_df = pd.merge(call_df, interactions_df, left_on='merge_phone', right_on='phone', how='left')
-        call_df = call_df.drop_duplicates(subset=['merge_phone'], keep='last')
+        call_df = pd.merge(call_df, interactions_df, on='phone', how='left')
+        call_df = call_df.drop_duplicates(subset=['phone'], keep='last')
 
         call_df['wa_sent'] = call_df['wa_sent'].fillna(0).astype(bool)
         if 'free_wa_sent' not in call_df.columns:
@@ -2111,6 +2111,7 @@ def render_crm(cx_df):
                 "📩 Send API": st.column_config.CheckboxColumn("📩 Send API", default=False),
                 "📨 Send Email": st.column_config.CheckboxColumn("📨 Send Email", default=False),
                 "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
+                "phone": st.column_config.TextColumn("Phone Number 📞", disabled=True),
                 "WhatsApp": st.column_config.LinkColumn("Open WhatsApp", display_text="Chat 💬"),
                 "✅ WA Sent": st.column_config.CheckboxColumn("✅ WA API", disabled=False),
                 "✅ Free WA Sent": st.column_config.CheckboxColumn("✅ Free WA", disabled=False),
