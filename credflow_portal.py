@@ -1723,6 +1723,7 @@ def render_dashboard(df_sales, prefix):
 
 
 
+@st.fragment
 def render_crm(cx_df):
     # ── TEST SANDBOX ──────────────────────────────────────────────
     with st.expander("🧪 **Test Sandbox — Single Message Tester (WhatsApp & Email)**", expanded=False):
