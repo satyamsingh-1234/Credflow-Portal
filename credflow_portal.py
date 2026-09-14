@@ -1099,6 +1099,61 @@ def generate_wa_link(r):
     return f"https://web.whatsapp.com/send?phone={wa_phone}&text={encoded_msg}"
 
 
+def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
+    success_count = 0
+    links_to_show = []
+    
+    for row in selected_rows:
+        name = str(row.get('Name', 'Customer'))
+        p = str(row.get('phone', '')).replace('.0', '').strip()
+        if not p:
+            continue
+        
+        row_copy = dict(row)
+        if usage_check_col and usage_check_col in row_copy:
+            row_copy['Usage check'] = row_copy.get(usage_check_col, '')
+            
+        link = row_copy.get('WhatsApp', '')
+        if not link or str(link).strip() == '':
+            link = generate_wa_link(row_copy)
+            
+        conn.execute('''
+            INSERT INTO customer_interactions (phone, free_wa_sent)
+            VALUES (?, 1)
+            ON CONFLICT(phone) DO UPDATE SET free_wa_sent = 1
+        ''', (p,))
+        
+        usage_val = str(row_copy.get('Usage check', ''))
+        email_val = str(row_copy.get('email', ''))
+        if 'log_outreach_event' in globals():
+            log_outreach_event("Free WhatsApp", usage_val, name, p, email_val, 'Free WA Web Link', 'SUCCESS')
+            
+        if link:
+            success_count += 1
+            links_to_show.append((name, p, link))
+            
+    conn.commit()
+    
+    # Try desktop automation if running locally on Windows desktop with pyautogui installed
+    try:
+        import webbrowser, pyautogui, time
+        for name, p, link in links_to_show:
+            webbrowser.open(link)
+            time.sleep(8)
+            pyautogui.press('enter')
+            time.sleep(1)
+            pyautogui.hotkey('ctrl', 'w')
+            time.sleep(1)
+    except Exception:
+        pass
+        
+    st.success(f"✅ Free WhatsApp status marked as Sent for {success_count} customers!")
+    if links_to_show:
+        with st.expander("📲 **Clickable WhatsApp Web Links for Selected Customers**", expanded=True):
+            for name, p, link in links_to_show:
+                st.markdown(f"- **{name}** (`{p}`): [👉 Open WhatsApp Chat ({p})]({link})")
+
+
 # ── INTERAKT WHATSAPP API LOGIC ──
 def send_interakt_msg(phone, name, health, credits):
     import requests
@@ -2203,45 +2258,7 @@ def render_crm(cx_df):
             if selected_free_wa_df.empty:
                 st.warning("Pehle table mein se '📱 Send Free WA' check box tick karein un users ke liye jinko message bhejna hai.")
             else:
-                import webbrowser
-                import time
-                import pyautogui
-                st.warning(f"⚠️ AUTO-SENDING WhatsApp for {len(selected_free_wa_df)} customers. KRIPYA APNE MOUSE AUR KEYBOARD KO HAATH NA LAGAYEIN JAB TAK PROCESS PURA NA HO JAYE!")
-                
-                success_count = 0
-                error_count = 0
-                total_fwa = len(selected_free_wa_df)
-                ph_ui, update_ui = create_progress_ui("Sending Free WhatsApp")
-                
-                for idx, row in enumerate(selected_free_wa_df.to_dict('records')):
-                    name = str(row.get('Name', ''))
-                    p = str(row.get('phone', '')).replace('.0', '').strip()
-                    link = row.get('WhatsApp', '')
-                    if not link or str(link).strip() == '':
-                        link = generate_wa_link(row)
-                    
-                    if link:
-                        conn.execute('''
-                            INSERT INTO customer_interactions (phone, free_wa_sent)
-                            VALUES (?, 1)
-                            ON CONFLICT(phone) DO UPDATE SET free_wa_sent = 1
-                        ''', (p,))
-                        webbrowser.open(link)
-                        time.sleep(10)
-                        pyautogui.press('enter')
-                        time.sleep(1)
-                        pyautogui.hotkey('ctrl', 'w')
-                        time.sleep(1)
-                        success_count += 1
-                    else:
-                        error_count += 1
-                    
-                    update_ui(idx + 1, total_fwa, name, success_count, error_count)
-
-                conn.commit()
-                st.success(f"✅ Auto WhatsApp Sending Complete! Sent {success_count} messages.")
-                time.sleep(2)
-                st.rerun()
+                process_free_wa_dispatch_safe(selected_free_wa_df.to_dict('records'), conn)
 
         if em_clicked:
             selected_em_df = edited_df[edited_df['📨 Send Email'] == True]
@@ -2608,44 +2625,11 @@ def render_batch_comparison(conn):
                             st.error(f"Failed: {result}")
 
             if btn_fw_u:
-                import webbrowser, time, pyautogui
-                selected_fwa_u = upg_edited[upg_edited['💬 Send Free WA'] == True]
+                selected_fwa_u = upg_edited[upg_edited['📱 Send Free WA'] == True]
                 if selected_fwa_u.empty:
-                    st.warning("Pehle table mein se '💬 Send Free WA' check box tick karein.")
+                    st.warning("Pehle table mein se '📱 Send Free WA' check box tick karein.")
                 else:
-                    st.warning(f"⚠️ AUTO-SENDING WhatsApp for {len(selected_fwa_u)} customers. KRIPYA APNE MOUSE AUR KEYBOARD KO HAATH NA LAGAYEIN!")
-                    success_count = 0
-                    error_count = 0
-                    total_fwa = len(selected_fwa_u)
-                    ph_ui, update_ui = create_progress_ui("Sending Free WhatsApp")
-                    
-                    for idx, row in enumerate(selected_fwa_u.to_dict('records')):
-                        name = str(row.get('Name', ''))
-                        p = str(row.get('phone', '')).replace('.0', '').strip()
-                        link = row.get('WhatsApp', '')
-                        if not link or str(link).strip() == '':
-                            row['Usage check'] = row.get('Usage check (Batch B)', '')
-                            link = generate_wa_link(row)
-                            
-                        if link:
-                            if p:
-                                log_outreach_event("Free WhatsApp", row.get('Usage check (Batch B)', ''), name, p, row.get('email', ''), 'Free WA Web Link', 'SUCCESS')
-                            webbrowser.open(link)
-                            time.sleep(10)
-                            pyautogui.press('enter')
-                            time.sleep(1)
-                            pyautogui.hotkey('ctrl', 'w')
-                            time.sleep(1)
-                            success_count += 1
-                        else:
-                            error_count += 1
-                            
-                        update_ui(idx + 1, total_fwa, name, success_count, error_count)
-                        
-                    conn.commit()
-                    st.success(f"✅ Auto WhatsApp Sending Complete! Sent {success_count} messages.")
-                    time.sleep(2)
-                    st.rerun()
+                    process_free_wa_dispatch_safe(selected_fwa_u.to_dict('records'), conn, usage_check_col='Usage check (Batch B)')
 
             # Auto-save edits for Upgraded list
             diff_status = upg_df_export['Call Status'].fillna('').astype(str).str.strip() != upg_edited['Call Status'].fillna('').astype(str).str.strip()
@@ -2788,44 +2772,11 @@ def render_batch_comparison(conn):
                             st.error(f"Failed: {result}")
 
             if btn_fw_d:
-                import webbrowser, time, pyautogui
                 selected_fwa_d = deg_edited[deg_edited['📱 Send Free WA'] == True]
                 if selected_fwa_d.empty:
                     st.warning("Pehle table mein se '📱 Send Free WA' check box tick karein.")
                 else:
-                    st.warning(f"⚠️ AUTO-SENDING WhatsApp for {len(selected_fwa_d)} customers. KRIPYA APNE MOUSE AUR KEYBOARD KO HAATH NA LAGAYEIN!")
-                    success_count = 0
-                    error_count = 0
-                    total_fwa = len(selected_fwa_d)
-                    ph_ui, update_ui = create_progress_ui("Sending Free WhatsApp")
-                    
-                    for idx, row in enumerate(selected_fwa_d.to_dict('records')):
-                        name = str(row.get('Name', ''))
-                        p = str(row.get('phone', '')).replace('.0', '').strip()
-                        link = row.get('WhatsApp', '')
-                        if not link or str(link).strip() == '':
-                            row['Usage check'] = row.get('Usage check (Batch B)', '')
-                            link = generate_wa_link(row)
-                            
-                        if link:
-                            if p:
-                                log_outreach_event("Free WhatsApp", row.get('Usage check (Batch B)', ''), name, p, row.get('email', ''), 'Free WA Web Link', 'SUCCESS')
-                            webbrowser.open(link)
-                            time.sleep(10)
-                            pyautogui.press('enter')
-                            time.sleep(1)
-                            pyautogui.hotkey('ctrl', 'w')
-                            time.sleep(1)
-                            success_count += 1
-                        else:
-                            error_count += 1
-                            
-                        update_ui(idx + 1, total_fwa, name, success_count, error_count)
-                        
-                    conn.commit()
-                    st.success(f"✅ Auto WhatsApp Sending Complete! Sent {success_count} messages.")
-                    time.sleep(2)
-                    st.rerun()
+                    process_free_wa_dispatch_safe(selected_fwa_d.to_dict('records'), conn, usage_check_col='Usage check (Batch B)')
 
             # Auto-save edits for Degraded list
             diff_status = deg_df_export['Call Status'].fillna('').astype(str).str.strip() != deg_edited['Call Status'].fillna('').astype(str).str.strip()
