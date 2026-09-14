@@ -1100,6 +1100,8 @@ def generate_wa_link(r):
 
 
 def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
+    import json
+    import streamlit.components.v1 as components
     success_count = 0
     links_to_show = []
     
@@ -1134,22 +1136,17 @@ def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
             
     conn.commit()
     
-    # Try desktop automation if running locally on Windows desktop with pyautogui installed
-    try:
-        import webbrowser, pyautogui, time
-        for name, p, link in links_to_show:
-            webbrowser.open(link)
-            time.sleep(8)
-            pyautogui.press('enter')
-            time.sleep(1)
-            pyautogui.hotkey('ctrl', 'w')
-            time.sleep(1)
-    except Exception:
-        pass
-        
     st.success(f"✅ Free WhatsApp status marked as Sent for {success_count} customers!")
     if links_to_show:
+        # Inject JavaScript to open WhatsApp Web tabs directly in the user's browser
+        js_code = "<script>\n"
+        for name, p, link in links_to_show:
+            js_code += f"window.open({json.dumps(link)}, '_blank');\n"
+        js_code += "</script>"
+        components.html(js_code, height=0)
+
         with st.expander("📲 **Clickable WhatsApp Web Links for Selected Customers**", expanded=True):
+            st.info("💡 **WhatsApp Web Tabs Opened**: If your browser blocked pop-up windows, click the links below to open chat tabs directly.")
             for name, p, link in links_to_show:
                 st.markdown(f"- **{name}** (`{p}`): [👉 Open WhatsApp Chat ({p})]({link})")
 
