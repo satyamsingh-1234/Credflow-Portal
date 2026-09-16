@@ -880,12 +880,12 @@ def resolve_features_for_plan(plan_name_str):
 def eval_plan_credits_and_score(plan_name, c_val):
     """Evaluates CP Usage label and points based on Plan Tier (Lite/Pro/Enterprise)"""
     pn = str(plan_name).upper()
-    if any(k in pn for k in ['LITE', 'BASIC', 'STARTER']):
-        tier = 'LITE'
-    elif any(k in pn for k in ['SAVER', 'PRO']):
+    if any(k in pn for k in ['ENTERPRISE', 'ADVANCED', 'AI ACCOUNTANT', 'BVP', 'PREMIUM']):
+        tier = 'ENTERPRISE'
+    elif any(k in pn for k in ['SAVER', 'PRO', 'GROWTH', 'STANDARD']):
         tier = 'PRO'
     else:
-        tier = 'ENTERPRISE'
+        tier = 'LITE'
 
     if tier == 'LITE':
         if c_val > 100:
