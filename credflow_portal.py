@@ -37,15 +37,15 @@ if PERSISTENT_DB != REPO_DB:
         except Exception:
             pass
     elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Sync sales_plan_history from clean_master_data.parquet if persistent DB has old bloated/duplicate batches
+        # Sync sales_plan_history from clean_master_data.csv.gz if persistent DB has old bloated/duplicate batches
         try:
             p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
             cur = p_conn.cursor()
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
-            parquet_master = os.path.join(os.path.dirname(__file__), "clean_master_data.parquet")
-            if p_cnt != 5465 and os.path.exists(parquet_master):
-                clean_df = pd.read_parquet(parquet_master)
+            csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+            if p_cnt != 5465 and os.path.exists(csv_master):
+                clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
                 p_conn.commit()
 
@@ -3171,6 +3171,10 @@ else:
 is_admin = st.session_state.get('admin_unlocked', False)
 
 if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
+    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+    if os.path.exists(csv_master):
+        clean_df = pd.read_csv(csv_master)
+        clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
     st.cache_data.clear()
     st.rerun()
 
@@ -3188,6 +3192,17 @@ with tab_dash:
         time.sleep(0.18)
         import pandas as pd
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+        
+        # Check if database has old bloated rows
+        cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0] if not s_batches.empty else 0
+        if cur_row_cnt != 5465:
+            csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+            if os.path.exists(csv_master):
+                clean_df = pd.read_csv(csv_master)
+                clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+                st.cache_data.clear()
+                st.rerun()
+
         if not s_batches.empty:
             hist_df = fetch_all_history()
             render_dashboard(hist_df, "dash_master")
