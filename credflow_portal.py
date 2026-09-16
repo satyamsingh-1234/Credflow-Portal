@@ -1342,7 +1342,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales):
+def prepare_eval_df(df_sales, cache_key="v20260916_clean"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -3159,6 +3159,10 @@ else:
     st.sidebar.info("👁️ View-Only Mode Active. File uploads & batch deletions are locked.")
 
 is_admin = st.session_state.get('admin_unlocked', False)
+
+if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
 
 
 tab_dash, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
