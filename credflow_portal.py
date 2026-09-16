@@ -37,14 +37,16 @@ if PERSISTENT_DB != REPO_DB:
         except Exception:
             pass
     elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Sync sales_plan_history from clean_master_data.csv.gz if persistent DB has old bloated/duplicate batches
+        # Sync sales_plan_history from clean_master_data.csv.gz if persistent DB has old bloated/duplicate batches or outdated BVP labels
         try:
             p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
             cur = p_conn.cursor()
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM sales_plan_history WHERE [plan name] LIKE '%BVP%' AND ([CP Usage in last 7 days] LIKE '%100%' OR [CP Usage in last 7 days] = '>100')")
+            old_bvp_cnt = cur.fetchone()[0]
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-            if p_cnt != 5465 and os.path.exists(csv_master):
+            if (p_cnt != 5465 or old_bvp_cnt > 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
                 p_conn.commit()
@@ -1352,7 +1354,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260916_bvp_perfect"):
+def prepare_eval_df(df_sales, cache_key="v20260916_bvp_force_v4"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1417,6 +1419,19 @@ def prepare_eval_df(df_sales, cache_key="v20260916_bvp_perfect"):
 
     eval_df['Usage check'] = eval_df.apply(_validate_row_usage_health, axis=1)
     filtered['Usage check'] = eval_df['Usage check']
+
+    def _eval_row_cp_label(row):
+        pn = str(row.get('plan name', ''))
+        c_raw = str(row.get('raw_credits', row.get('CP Usage in last 7 days', '0'))).replace(',', '').strip()
+        try:
+            c_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
+        except:
+            c_val = 0
+        lbl, _ = eval_plan_credits_and_score(pn, c_val)
+        return lbl if lbl != "None" else pd.NA
+
+    eval_df['CP Usage in last 7 days'] = eval_df.apply(_eval_row_cp_label, axis=1)
+    filtered['CP Usage in last 7 days'] = eval_df['CP Usage in last 7 days']
 
     if 'phone' in eval_df.columns and 'Usage check' in eval_df.columns:
         if 'Upload_Batch' in eval_df.columns:
