@@ -3242,6 +3242,28 @@ with tab_upload:
                             formatted_rows = []
                             s_no = 1
 
+                            # Dynamic column finding for Usage Data with smart fallback
+                            col_credits = next((c for c in s_df.columns if 'credit' in c.lower() or 'cp usage' in c.lower() or 'cp_usage' in c.lower()), None)
+                            col_login = next((c for c in s_df.columns if 'login' in c.lower() or 'app_login' in c.lower()), None)
+                            col_sync = next((c for c in s_df.columns if 'sync' in c.lower()), None)
+                            col_contacts = next((c for c in s_df.columns if 'contact' in c.lower() and 'fetch' in c.lower()), None)
+
+                            # Smart value-based fallback if columns are unnamed (e.g. Unnamed: 33, Unnamed: 38, Unnamed: 7)
+                            if not col_sync:
+                                for c in s_df.columns:
+                                    vals = s_df[c].dropna().astype(str).str.lower().head(10).tolist()
+                                    if any('sync' in v for v in vals):
+                                        col_sync = c
+                                        break
+
+                            if not col_login:
+                                for c in s_df.columns:
+                                    if c == col_sync: continue
+                                    vals = [v.strip().lower() for v in s_df[c].dropna().astype(str).head(10)]
+                                    if vals and all(v in ['yes', 'no', 'yess', 'true', 'false', '0', '1'] for v in vals):
+                                        col_login = c
+                                        break
+
                             for _, row in s_df.iterrows():
                                 cx_name = _get_row_val(row, ['first name', 'customer_name', 'name', 'customer'])
                                 raw_phone = _get_row_val(row, ['phone', 'mobile', 'contact', 'lsq phone'])
@@ -3281,12 +3303,6 @@ with tab_upload:
                                 login_7d = "No"
                                 cp_7d = "No"
                                 sync_7d = ""
-
-                                # Dynamic column finding for Usage Data
-                                col_credits = next((c for c in s_df.columns if 'credit' in c.lower() or 'cp usage' in c.lower()), None)
-                                col_login = next((c for c in s_df.columns if 'login' in c.lower()), None)
-                                col_sync = next((c for c in s_df.columns if 'sync' in c.lower()), None)
-                                col_contacts = next((c for c in s_df.columns if 'contact' in c.lower() and 'fetch' in c.lower()), None)
 
                                 c_val = 0
                                 cp_7d = "None"
