@@ -1747,7 +1747,7 @@ def render_dashboard(df_sales, prefix):
         | :--- | :--- | :---: | :---: |
         | **1. App Login** | `Yes` (Logged in within 7 days)<br>`No` / `None` | **+2 Points**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | **2. Last Sync** | `Yes` (Synced within 7 days)<br>`No` / `None` | **+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Enterprise Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+        | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Enterprise / BVP / Premium Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | *(4. Contact Details)* | *(Currently deferred / optional - does not penalize score)* | *N/A* | *Excluded from score calculation* |
 
         ---
