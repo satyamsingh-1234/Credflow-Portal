@@ -210,276 +210,303 @@ DEFAULT_OUTREACH_TEMPLATES = {
     "email_no_usage": {
         "channel": "Email",
         "health_tier": "No Usage 🔴",
-        "subject": "{name} - quick question regarding Tally setup",
-        "body": """<div style="font-family: Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 28px; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-<div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #E2E8F0; margin-bottom: 20px;">
-    <h2 style="color: #0F172A; margin: 0; font-size: 22px; font-weight: 800; tracking: -0.5px;">CredFlow <span style="color: #2563EB; font-weight: 400; font-size: 14px;">| Support & Onboarding</span></h2>
+        "subject": "{name} Ji - quick question regarding your CredFlow & Tally setup",
+        "body": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
+<!-- Header -->
+<div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 26px 30px; text-align: center; border-bottom: 3px solid #2563EB;">
+    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">CredFlow <span style="background: #2563EB; color: #FFFFFF; font-size: 11px; padding: 4px 9px; border-radius: 6px; font-weight: 700; text-transform: uppercase; vertical-align: middle; margin-left: 8px; letter-spacing: 0.5px;">Priority Onboarding</span></h1>
+    <p style="color: #94A3B8; font-size: 13px; margin: 6px 0 0 0;">Dedicated Cash-Flow & Payment Automation Support</p>
 </div>
 
-<p style="font-size: 15px; margin-top: 0;">Hi <b>{name}</b> 👋,</p>
+<div style="padding: 30px 28px;">
+<p style="font-size: 16px; margin-top: 0; color: #0F172A;">Dear <b>{name}</b>,</p>
 
-<p>I am reaching out from the CredFlow Customer Success Team. I noticed your account is set up, but you haven't started using the platform to automate your payment collections yet.</p>
+<p style="font-size: 14px; color: #334155; line-height: 1.7;">
+We noticed your <b>{plan_name_str}</b> account has been activated, but your automated payment reminders and Tally sync have not gone live yet. 
+Over <b>1,00,000+ growing Indian businesses</b> use CredFlow to recover outstanding payments <b>35% to 40% faster</b> while eliminating stressful manual debtor calls.
+</p>
 
 <!-- Stat Callouts -->
-<table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 22px 0; border-collapse: separate; border-spacing: 12px 0;">
     <tr>
-        <td width="50%" style="background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #1E40AF; text-transform: uppercase;">Time Saved</div>
-            <div style="font-size: 18px; font-weight: 800; color: #1D4ED8; margin-top: 2px;">⚡ 10+ Hours/Wk</div>
+        <td width="50%" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #2563EB; text-transform: uppercase; letter-spacing: 0.5px;">Manual Follow-up</div>
+            <div style="font-size: 20px; font-weight: 800; color: #0F172A; margin-top: 4px;">⚡ 10+ Hours/Wk Saved</div>
         </td>
-        <td width="50%" style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #065F46; text-transform: uppercase;">Recovery Speed</div>
-            <div style="font-size: 18px; font-weight: 800; color: #047857; margin-top: 2px;">📈 40% Faster</div>
+        <td width="50%" style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Average Recovery Speed</div>
+            <div style="font-size: 20px; font-weight: 800; color: #15803D; margin-top: 4px;">📈 40% Faster Cash</div>
         </td>
     </tr>
 </table>
 
-<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin: 0 0 10px 0; font-weight: bold; color: #334155; font-size: 14px;">Included Features in your {plan_name_str} plan:</p>
+<!-- Included Features Box -->
+<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 18px 20px; margin: 22px 0;">
+    <p style="margin: 0 0 12px 0; font-weight: 700; color: #0F172A; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🎁 Active Features Included in your Plan ({plan_name_str}):</p>
     {inc_html}
 </div>
 
-<!-- Support Options -->
-<div style="background-color: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #B45309; font-size: 13px;">❓ Facing any difficulty in setup or Tally sync? Select your issue below for instant support:</p>
+<!-- Support Options Box -->
+<div style="background-color: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 18px 20px; margin: 22px 0;">
+    <p style="margin-top: 0; margin-bottom: 12px; font-weight: 700; color: #92400E; font-size: 13px;">❓ Facing any difficulty in login, Tally connector, or sync? Select below for instant resolution:</p>
     <div style="text-align: center;">
-        <a href="{issue_sync}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">🔄 Sync Issue</a>
-        <a href="{issue_tech}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">⚙️ Tech Issue</a>
-        <a href="{issue_other}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">❓ Need Training</a>
+        <a href="{issue_sync}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">🔄 Tally Sync Issue</a>
+        <a href="{issue_tech}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⚙️ Technical / Login Help</a>
+        <a href="{issue_other}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">❓ Request 1-on-1 Walkthrough</a>
     </div>
 </div>
 
 <!-- Primary CTAs -->
-<div style="text-align: center; margin: 28px 0 16px 0;">
-    <a href="https://tidycal.com/m7jkyxm/credflow-product-training" style="background-color: #2563EB; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 15px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);">📅 Book 10-Min Optimization Session</a>
+<div style="text-align: center; margin: 30px 0 14px 0;">
+    <a href="https://tidycal.com/m7jkyxm/credflow-product-training" style="background-color: #2563EB; color: #FFFFFF; padding: 15px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 15px; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);">📅 Book 10-Min Live Setup Session (Free)</a>
 </div>
 
 <div style="text-align: center; margin-bottom: 24px;">
-    <a href="{wa_reply_link}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 13px;">💬 Instant Reply on WhatsApp</a>
+    <a href="{wa_reply_link}" style="background-color: #10B981; color: #FFFFFF; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 13px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">💬 Instant WhatsApp Reply to Priority Desk</a>
 </div>
 
-<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0 16px 0;">
+<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 26px 0 18px 0;">
 <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
-        <td style="color: #64748B; font-size: 12px; line-height: 1.5;">
-            📞 Support: <b>7217716636</b> | ✉️ Email: <b>support@credflow.in</b><br>
-            Regards,<br><b style="color: #334155;">CredFlow Support Team</b>
+        <td style="color: #64748B; font-size: 12px; line-height: 1.6;">
+            📞 Direct Priority Hotline: <b>+91 72177 16636</b> | ✉️ Priority Support: <b>support@credflow.in</b><br>
+            Regards,<br><b style="color: #1E293B; font-size: 13px;">CredFlow Customer Success & Onboarding Team</b>
         </td>
     </tr>
 </table>
+</div>
 </div>"""
     },
     "email_low_usage": {
         "channel": "Email",
         "health_tier": "Low Usage 🟡",
-        "subject": "{name} - quick question regarding CredFlow automation",
-        "body": """<div style="font-family: Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 28px; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-<div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #E2E8F0; margin-bottom: 20px;">
-    <h2 style="color: #0F172A; margin: 0; font-size: 22px; font-weight: 800; tracking: -0.5px;">CredFlow <span style="color: #D97706; font-weight: 400; font-size: 14px;">| Optimization & Growth</span></h2>
+        "subject": "{name} Ji - maximize cash flow with untapped CredFlow automation",
+        "body": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
+<!-- Header -->
+<div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 26px 30px; text-align: center; border-bottom: 3px solid #F59E0B;">
+    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">CredFlow <span style="background: #F59E0B; color: #FFFFFF; font-size: 11px; padding: 4px 9px; border-radius: 6px; font-weight: 700; text-transform: uppercase; vertical-align: middle; margin-left: 8px; letter-spacing: 0.5px;">Optimization Desk</span></h1>
+    <p style="color: #94A3B8; font-size: 13px; margin: 6px 0 0 0;">Cash-Flow Acceleration & Feature Adoption</p>
 </div>
 
-<p style="font-size: 15px; margin-top: 0;">Hi <b>{name}</b> 👋,</p>
+<div style="padding: 30px 28px;">
+<p style="font-size: 16px; margin-top: 0; color: #0F172A;">Dear <b>{name}</b>,</p>
 
-<p>I see you’ve been using CredFlow—that’s awesome! However, our analytics show you still have several <b>untapped automation features</b> in your <b>{plan_name_str}</b> plan that can boost your cash flow.</p>
+<p style="font-size: 14px; color: #334155; line-height: 1.7;">
+Great to see you utilizing CredFlow for your business! However, based on our account analytics, you are currently using <b>less than 30% of the automation capabilities</b> available in your <b>{plan_name_str}</b> plan.
+There is substantial outstanding capital sitting un-automated on your ledger right now.
+</p>
 
 <!-- Stat Callouts -->
-<table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 22px 0; border-collapse: separate; border-spacing: 12px 0;">
     <tr>
-        <td width="50%" style="background-color: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #065F46; text-transform: uppercase;">Weekly Savings</div>
-            <div style="font-size: 18px; font-weight: 800; color: #047857; margin-top: 2px;">⚡ 10+ Hours</div>
+        <td width="50%" style="background-color: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">Recovery Acceleration</div>
+            <div style="font-size: 20px; font-weight: 800; color: #15803D; margin-top: 4px;">📈 Collect 30% Faster</div>
         </td>
-        <td width="50%" style="background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #1E40AF; text-transform: uppercase;">Cash Flow Impact</div>
-            <div style="font-size: 18px; font-weight: 800; color: #1D4ED8; margin-top: 2px;">📈 40% Faster</div>
+        <td width="50%" style="background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #1E40AF; text-transform: uppercase; letter-spacing: 0.5px;">Time Saved Weekly</div>
+            <div style="font-size: 20px; font-weight: 800; color: #1D4ED8; margin-top: 4px;">⚡ 10+ Hours/Wk</div>
         </td>
     </tr>
 </table>
 
-<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin: 0 0 10px 0; font-weight: bold; color: #334155; font-size: 14px;">Included Features Ready for Use:</p>
+<!-- Included Features Ready for Use -->
+<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 18px 20px; margin: 22px 0;">
+    <p style="margin: 0 0 12px 0; font-weight: 700; color: #0F172A; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">💡 Included Features Ready to Supercharge Your Cash-Flow:</p>
     {inc_html}
 </div>
 
-<!-- Support Options -->
-<div style="background-color: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #B45309; font-size: 13px;">❓ Having any issue with sync, login or features? Select below:</p>
+<!-- Support Options Box -->
+<div style="background-color: #FFFBEB; border: 1px solid #FDE68A; border-radius: 10px; padding: 18px 20px; margin: 22px 0;">
+    <p style="margin-top: 0; margin-bottom: 12px; font-weight: 700; color: #92400E; font-size: 13px;">❓ Need assistance optimizing rules, custom reminders, or staff access?</p>
     <div style="text-align: center;">
-        <a href="{issue_sync}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">🔄 Sync Issue</a>
-        <a href="{issue_tech}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">⚙️ Tech Issue</a>
-        <a href="{issue_other}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">❓ Need Training</a>
+        <a href="{issue_sync}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">🔄 Tally Sync Check</a>
+        <a href="{issue_tech}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">⚙️ Reminder Schedule Help</a>
+        <a href="{issue_other}" style="display: inline-block; margin: 4px; padding: 9px 16px; background-color: #FFFFFF; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">❓ Free 10-Min Audit Call</a>
     </div>
 </div>
 
 <!-- Primary CTAs -->
-<div style="text-align: center; margin: 28px 0 16px 0;">
-    <a href="https://tidycal.com/m7jkyxm/credflow-product-training" style="background-color: #2563EB; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 15px; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);">📅 Book 10-Min Optimization Session</a>
+<div style="text-align: center; margin: 30px 0 14px 0;">
+    <a href="https://tidycal.com/m7jkyxm/credflow-product-training" style="background-color: #2563EB; color: #FFFFFF; padding: 15px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 15px; box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);">📅 Claim 10-Min Free Optimization Session</a>
 </div>
 
 <div style="text-align: center; margin-bottom: 24px;">
-    <a href="{wa_reply_link}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 13px;">💬 Instant Reply on WhatsApp</a>
+    <a href="{wa_reply_link}" style="background-color: #10B981; color: #FFFFFF; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 13px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">💬 Connect with Optimization Specialist on WhatsApp</a>
 </div>
 
-<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0 16px 0;">
+<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 26px 0 18px 0;">
 <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
-        <td style="color: #64748B; font-size: 12px; line-height: 1.5;">
-            📞 Support: <b>7217716636</b> | ✉️ Email: <b>support@credflow.in</b><br>
-            Regards,<br><b style="color: #334155;">CredFlow Support Team</b>
+        <td style="color: #64748B; font-size: 12px; line-height: 1.6;">
+            📞 Direct Priority Hotline: <b>+91 72177 16636</b> | ✉️ Priority Support: <b>support@credflow.in</b><br>
+            Regards,<br><b style="color: #1E293B; font-size: 13px;">CredFlow Customer Success & Growth Team</b>
         </td>
     </tr>
 </table>
+</div>
 </div>"""
     },
     "email_proper_usage": {
         "channel": "Email",
         "health_tier": "Proper Usage 🟢",
-        "subject": "{name} - quick question regarding WhatsApp API upgrade",
-        "body": """<div style="font-family: Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; padding: 28px; background-color: #FFFFFF; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
-<div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #E2E8F0; margin-bottom: 20px;">
-    <h2 style="color: #0F172A; margin: 0; font-size: 22px; font-weight: 800; tracking: -0.5px;">CredFlow <span style="color: #7C3AED; font-weight: 400; font-size: 14px;">| Enterprise Automation</span></h2>
+        "subject": "{name} Ji - VIP Invitation: Upgrade to Meta WhatsApp API & AI Accountant",
+        "body": """<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
+<!-- Header -->
+<div style="background: linear-gradient(135deg, #0F172A 0%, #312E81 100%); padding: 26px 30px; text-align: center; border-bottom: 3px solid #7C3AED;">
+    <h1 style="color: #FFFFFF; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">CredFlow <span style="background: #7C3AED; color: #FFFFFF; font-size: 11px; padding: 4px 9px; border-radius: 6px; font-weight: 700; text-transform: uppercase; vertical-align: middle; margin-left: 8px; letter-spacing: 0.5px;">VIP Enterprise Suite</span></h1>
+    <p style="color: #C7D2FE; font-size: 13px; margin: 6px 0 0 0;">Official Meta WhatsApp API & AI Accountant Integration</p>
 </div>
 
-<p style="font-size: 15px; margin-top: 0;">Hi <b>{name}</b> 🚀,</p>
+<div style="padding: 30px 28px;">
+<p style="font-size: 16px; margin-top: 0; color: #0F172A;">Dear <b>{name}</b> 🌟,</p>
 
-<p>Awesome job managing your collections with CredFlow! You are currently active on the <b>{plan_name_str}</b> plan. 👏</p>
+<p style="font-size: 14px; color: #334155; line-height: 1.7;">
+Heartiest congratulations! Your business is actively managing receivables on the <b>{plan_name_str}</b> plan and ranks among the <b>top 10% performing organizations</b> across the CredFlow network. 👏
+To elevate your business to complete zero-touch billing automation, we are extending an exclusive VIP upgrade offer.
+</p>
 
 <!-- Stat Callouts -->
-<table width="100%" cellpadding="0" cellspacing="0" style="margin: 20px 0; border-collapse: separate; border-spacing: 10px 0;">
+<table width="100%" cellpadding="0" cellspacing="0" style="margin: 22px 0; border-collapse: separate; border-spacing: 12px 0;">
     <tr>
-        <td width="50%" style="background-color: #F3E8FF; border: 1px solid #DDD6FE; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #6D28D9; text-transform: uppercase;">Official WA API</div>
-            <div style="font-size: 18px; font-weight: 800; color: #5B21B6; margin-top: 2px;">📲 Green Tick</div>
+        <td width="50%" style="background-color: #FAF5FF; border: 1px solid #E9D5FF; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #7E22CE; text-transform: uppercase; letter-spacing: 0.5px;">Official Meta API</div>
+            <div style="font-size: 19px; font-weight: 800; color: #6B21A8; margin-top: 4px;">📲 Verified Green Tick</div>
         </td>
-        <td width="50%" style="background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px; padding: 12px; text-align: center;">
-            <div style="font-size: 11px; font-weight: bold; color: #1E40AF; text-transform: uppercase;">AI Accountant</div>
-            <div style="font-size: 18px; font-weight: 800; color: #1D4ED8; margin-top: 2px;">🤖 Auto OCR</div>
+        <td width="50%" style="background-color: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 14px; text-align: center;">
+            <div style="font-size: 11px; font-weight: 700; color: #1E40AF; text-transform: uppercase; letter-spacing: 0.5px;">AI Accountant</div>
+            <div style="font-size: 19px; font-weight: 800; color: #1D4ED8; margin-top: 4px;">🤖 Zero-Touch Auto OCR</div>
         </td>
     </tr>
 </table>
 
-<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin: 0 0 8px 0; font-weight: bold; color: #166534; font-size: 13px;">✅ Your Active Plan Features:</p>
+<!-- Feature Tier Comparison Box -->
+<div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 18px 20px; margin: 22px 0;">
+    <p style="margin: 0 0 10px 0; font-weight: 700; color: #15803D; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">✅ Your Current Active Plan ({plan_name_str}):</p>
     {inc_html}
-    <hr style="border: none; border-top: 1px dashed #CBD5E1; margin: 12px 0;">
-    <p style="margin: 0 0 8px 0; font-weight: bold; color: #6D28D9; font-size: 13px;">🚀 Higher Automation Available on Upgrade:</p>
+    <hr style="border: none; border-top: 1px dashed #CBD5E1; margin: 14px 0;">
+    <p style="margin: 0 0 10px 0; font-weight: 700; color: #7C3AED; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🚀 Next-Level Enterprise Capabilities Unlocked on Upgrade:</p>
     {miss_html}
 </div>
 
-<!-- Support Options -->
-<div style="background-color: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 16px; margin: 20px 0;">
-    <p style="margin-top: 0; margin-bottom: 10px; font-weight: bold; color: #B45309; font-size: 13px;">❓ Have any pending query or issue? Select below:</p>
-    <div style="text-align: center;">
-        <a href="{issue_sync}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">🔄 Sync Issue</a>
-        <a href="{issue_tech}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">⚙️ Tech Issue</a>
-        <a href="{issue_other}" style="display: inline-block; margin: 4px; padding: 8px 14px; background-color: #FEF3C7; color: #92400E; border: 1px solid #F59E0B; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: bold;">❓ Need Training</a>
-    </div>
-</div>
-
 <!-- Primary CTAs -->
-<div style="text-align: center; margin: 28px 0 16px 0;">
-    <a href="https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api" style="background-color: #7C3AED; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; font-size: 15px; box-shadow: 0 4px 10px rgba(124, 58, 237, 0.3);">📲 Book WhatsApp API Session</a>
+<div style="text-align: center; margin: 30px 0 14px 0;">
+    <a href="https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api" style="background-color: #7C3AED; color: #FFFFFF; padding: 15px 32px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 15px; box-shadow: 0 6px 16px rgba(124, 58, 237, 0.35);">📲 Book VIP 1-on-1 WhatsApp API Demo</a>
 </div>
 
 <div style="text-align: center; margin-bottom: 24px;">
-    <a href="{wa_upg_link}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold; font-size: 13px;">💬 Request Upgrade via WhatsApp</a>
+    <a href="{wa_upg_link}" style="background-color: #10B981; color: #FFFFFF; padding: 12px 24px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 700; font-size: 13px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);">💬 Request VIP Upgrade Pricing on WhatsApp</a>
 </div>
 
-<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 24px 0 16px 0;">
+<hr style="border: none; border-top: 1px solid #E2E8F0; margin: 26px 0 18px 0;">
 <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
-        <td style="color: #64748B; font-size: 12px; line-height: 1.5;">
-            📞 Support: <b>7217716636</b> | ✉️ Email: <b>support@credflow.in</b><br>
-            Regards,<br><b style="color: #334155;">CredFlow Support Team</b>
+        <td style="color: #64748B; font-size: 12px; line-height: 1.6;">
+            📞 Priority Enterprise Desk: <b>+91 72177 16636</b> | ✉️ Executive Email: <b>support@credflow.in</b><br>
+            Regards,<br><b style="color: #1E293B; font-size: 13px;">CredFlow Enterprise Solutions Group</b>
         </td>
     </tr>
 </table>
+</div>
 </div>"""
     },
     "wa_free_no_usage": {
         "channel": "Free WhatsApp",
         "health_tier": "No Usage 🔴",
         "subject": "",
-        "body": """Hi {name} Sir 👋,
+        "body": """*Namaste {name} Ji* 🙏,
 
-Main CredFlow Support Team se baat kar raha hoon. Aapke account ka setup complete ho chuka hai, lekin lagta hai aapne abhi software use karna start nahi kiya hai.{feat_section}
+Main CredFlow Priority Onboarding Desk se connect kar raha hoon.
 
-Kya aapko login, Tally sync ya setup mein koi difficulty aa rahi hai? 
+Aapke business ke liye *{plan_name}* account successfully activate ho chuka hai, par automated payment recovery aur Tally sync abhi live nahi hua hai.
 
-👇 **Quick Action Links (Click to reply):**
-💬 **Request Setup Callback**: {reply_link}
-📅 **Book Free Training**: https://tidycal.com/m7jkyxm/credflow-product-training
-📲 **Book Session for WhatsApp API**: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api
-🔑 **Login to App**: https://app.credflow.in
+CredFlow use karke 1,00,000+ businesses:
+⚡ *10+ Hours/Week* ka manual follow-up time bacha rahe hain
+📈 *40% Faster* pending debtor payments recover kar rahe hain{feat_section}
 
-Support: 7217716636 | Email: support@credflow.in
+💡 *Kya hum aapke liye 10-minute ka quick remote setup session schedule karein?*
+Humari technical team live connect karke aapka poora setup turant active karwa degi.
 
-Regards,
-CredFlow Support Team"""
+👉 **Bas is message par "YES" likh kar reply karein**, humari senior team turant aapse connect karegi.
+
+Direct Links:
+💬 *Chat on WhatsApp*: {reply_link}
+📅 *Schedule Free Live Session*: https://tidycal.com/m7jkyxm/credflow-product-training
+🔑 *Web App Login*: https://app.credflow.in
+
+Warm Regards,
+*CredFlow Customer Success Desk*
+📞 +91 72177 16636 | support@credflow.in"""
     },
     "wa_free_low_usage": {
         "channel": "Free WhatsApp",
         "health_tier": "Low Usage 🟡",
         "subject": "",
-        "body": """Hi {name} Sir 👋,
+        "body": """*Namaste {name} Ji* 🙏,
 
-Main CredFlow Support Team se baat kar raha hoon. Humne dekha ki aapka account active hai, par aapne abhi tak apne plan ke features ka 100% fayda nahi uthaya hai.{feat_section}
+Main CredFlow Growth Team se connect kar raha hoon.
 
-⚡ **Automation Optimization Call:**
-Humari team se 10-min ke quick session mein apne automated payment reminders set karwayein taaki collections 30% faster hon.
+Aap CredFlow use kar rahe hain — that's fantastic! 👏 
+Lekin humare analytics ke according, aapke *{plan_name}* plan ke kaafi powerful features abhi bhi unutilized hain jisse aapka cash flow aur tezi se accelerate ho sakta hai.{feat_section}
 
-👇 **Quick Action Links (Click to reply):**
-💬 **Request Optimization Session**: {reply_link}
-📅 **Book Free Training**: https://tidycal.com/m7jkyxm/credflow-product-training
-📲 **Book Session for WhatsApp API**: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api
-🔑 **Login to App**: https://app.credflow.in
+🎯 *Complimentary 10-Min Account Optimization Audit:*
+Humari senior team aapke accounts person ke sath 1-on-1 connect karke:
+1. Multi-tier automated reminder sequences active karegi
+2. Aging analysis aur auto-reconciliation setup karegi
+3. Smart payment collection links live karegi
 
-Support: 7217716636 | Email: support@credflow.in
+👉 **Agar aap chahte hain ye rules setup karwana, toh bas "AUDIT" likh kar reply karein.**
 
-Regards,
-CredFlow Support Team"""
+Quick Access:
+💬 *Quick WhatsApp Reply*: {reply_link}
+📅 *Book 10-Min Free Slot*: https://tidycal.com/m7jkyxm/credflow-product-training
+📲 *Explore WhatsApp API*: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api
+
+Warm Regards,
+*CredFlow Growth & Optimization Team*
+📞 +91 72177 16636 | support@credflow.in"""
     },
     "wa_free_proper_usage": {
         "channel": "Free WhatsApp",
         "health_tier": "Proper Usage 🟢",
         "subject": "",
-        "body": """Hi {name} Sir 🚀,
+        "body": """*Namaste {name} Ji* 🚀,
 
-Great job! Aap CredFlow ({plan_name}) active use kar rahe hain aur apne collections manage kar rahe hain. 👏
+Heartiest Congratulations! Aapka CredFlow *{plan_name}* par active usage dekh kar bohot khushi hui. Aap CredFlow ke top 10% active business leaders mein shamil hain. 🌟
 
 {inc_sec}{upg_sec}
 
-In advanced features (AI Accountant & WhatsApp API) ko unlock karke billing aur collections 100% automate karne ke liye aaj hi plan upgrade karein!
+🔥 *Exclusive VIP Enterprise Upgrade (Special Priority Access):*
+Ab aap apne business ko **Official Meta WhatsApp API (Verified Green Tick)** aur **AI Accountant (Auto OCR Voucher Posting)** par upgrade karke billing aur collections ko *100% Zero-Touch Automate* kar sakte hain!
 
-👇 **Quick Action Links (Click to Upgrade via WhatsApp):**
-⚡ **Request Plan Upgrade**: {upg_link}
-🚀 **Book Upgrade Call (WhatsApp)**: {upg_link}
-📅 **Book Free Training**: https://tidycal.com/m7jkyxm/credflow-product-training
-📲 **Book Session for WhatsApp API**: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api
-🔑 **Login to App**: https://app.credflow.in
+👉 **Agar aap live demo aur discounted priority pricing dekhna chahte hain, toh bas "UPGRADE" likh kar reply karein.**
 
-Support: 7217716636 | Email: support@credflow.in
+Quick Links:
+⚡ *Direct WhatsApp Upgrade*: {upg_link}
+📲 *Book Live 1-on-1 API Demo*: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api
+🔑 *CredFlow Portal*: https://app.credflow.in
 
-Regards,
-CredFlow Support Team"""
+Warm Regards,
+*Enterprise Solutions Group | CredFlow*
+📞 +91 72177 16636 | support@credflow.in"""
     },
     "interakt_no_usage": {
         "channel": "Interakt WA API",
         "health_tier": "No Usage 🔴",
         "subject": "credflow_no_usage",
-        "body": "Hi {{1}}, Your CredFlow account setup is complete. Contact support for login/sync help."
+        "body": "Hi {{1}}, your CredFlow account setup is ready. Schedule your free 10-min live setup session to activate 40% faster collections: https://tidycal.com/m7jkyxm/credflow-product-training or reply YES."
     },
     "interakt_low_usage": {
         "channel": "Interakt WA API",
         "health_tier": "Low Usage 🟡",
         "subject": "credflow_low_usage",
-        "body": "Hi {{1}}, you have {{2}} credits remaining. Activate automated payment reminders to save 10+ hours a week."
+        "body": "Hi {{1}}, you have {{2}} credits in CredFlow. Collect 30% faster with automated payment reminders. Book free optimization session: https://tidycal.com/m7jkyxm/credflow-product-training"
     },
     "interakt_proper_usage": {
         "channel": "Interakt WA API",
         "health_tier": "Proper Usage 🟢",
         "subject": "credflow_proper_usage",
-        "body": "Hi {{1}}, you have used {{2}} credits. Upgrade to WhatsApp API & AI Accountant for 100% automation."
+        "body": "Hi {{1}}, congratulations on active usage! You've used {{2}} credits. Upgrade to Official Meta WhatsApp API & AI Accountant: https://tidycal.com/m7jkyxm/book-your-session-for-whatsapp-api"
     }
 }
 
