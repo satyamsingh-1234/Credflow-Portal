@@ -1397,6 +1397,12 @@ def prepare_eval_df(df_sales):
         if c_val == 0 and not login_yes and not sync_yes and ct_val == 0:
             return 'No Usage 🔴'
 
+        # Special Rule: Lite Plan with Login=Yes AND Sync=Yes -> Always Proper Usage 🟢
+        pn_upper = str(row.get('plan name', '')).upper()
+        is_lite_plan = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
+        if is_lite_plan and login_yes and sync_yes:
+            return 'Proper Usage 🟢'
+
         raw_h = str(row.get('Usage check', '')).strip()
         if raw_h and any(h in raw_h for h in ['Proper', 'Low', 'No']):
             return raw_h
@@ -1719,21 +1725,28 @@ def render_dashboard(df_sales, prefix):
     with st.expander("ℹ️ How Usage Health Score is Calculated (Scoring Logic & Rules Guide)", expanded=False):
         st.markdown("""
         ### 📊 CredFlow Customer Usage Health Scoring Model
-        Customer health is calculated dynamically across **4 Key Usage Parameters** (Maximum Score = **8 Points**):
+
+        #### ⭐ Special Override Rule (Lite / Basic Plans):
+        - **Rule 1 (Lite Plan Exemption)**: For **Lite / Basic / Starter** plans, if **App Login in last 7 days = `Yes`** **AND** **Last Sync in 7 days = `Yes`**, the customer is classified directly as **`🟢 Proper Usage`** *(regardless of credits used, recognizing active daily monitoring)*.
+
+        ---
+
+        #### 🎯 Active 3-Parameter Scoring Model (For all other plans / Fallback):
+        Customer health is calculated dynamically across **3 Active Parameters** (Maximum Score = **6 Points**):
         
         | Parameter | Condition / Tier | Points | Missing / Blank Data Rule |
         | :--- | :--- | :---: | :---: |
         | **1. App Login** | `Yes` (Logged in within 7 days)<br>`No` / `None` | **+2 Points**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | **2. Last Sync** | `Yes` (Synced within 7 days)<br>`No` / `None` | **+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Enterprise Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | **4. Contact Details Fetched** | `> 31 Contacts`<br>`11 to 30 Contacts`<br>`0 to 10` / `None` | **+2 Points**<br>**+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+        | *(4. Contact Details)* | *(Currently deferred / optional - does not penalize score)* | *N/A* | *Excluded from score calculation* |
 
         ---
 
         ### 🚦 Health Category Classification Rules:
-        - 🔴 **No Usage (Score = 0)**: Customers with **0 total points** *(Incomplete setup, zero credits used, no sync, or completely blank rows)*.
-        - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & optimization.
-        - 🟢 **Proper Usage (Score ≥ 4)**: Highly active customers utilizing multiple CredFlow features *(Targeted for Upsell & Upgrades to AI Accountant / WhatsApp API)*.
+        - 🔴 **No Usage (Score = 0)**: Inactive customers *(Incomplete setup, zero credits used, no sync, no login)*.
+        - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
+        - 🟢 **Proper Usage (Score ≥ 4 OR Lite Plan with Login + Sync)**: Active, engaged customers utilizing CredFlow.
         
         > 💡 **Presentation Note**: All missing data cells, empty fields, and `NaN` values are strictly assigned **`0 Points ("None")`**. This guarantees zero false positives for *Proper Usage 🟢*.
         """)
@@ -3335,14 +3348,13 @@ with tab_upload:
                                     if contact_val > 30: h_score += 2
                                     elif contact_val >= 11: h_score += 1
 
-                                    raw_health = str(row.get('Usage check', '')).strip()
-                                    if c_val == 0 and login_7d != "Yes" and sync_7d != "Yes":
-                                        if h_score == 0: health_status = "No Usage 🔴"
-                                        elif h_score <= 3: health_status = "Low Usage 🟡"
-                                        else: health_status = "Proper Usage 🟢"
-                                    elif raw_health and any(h in raw_health for h in ['Proper', 'Low', 'No']):
-                                        health_status = raw_health
+                                    pn_upper = str(plan_name).upper()
+                                    is_lite_plan = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
+
+                                    if is_lite_plan and login_7d == "Yes" and sync_7d == "Yes":
+                                        health_status = "Proper Usage 🟢"
                                     else:
+                                        # Rule 2: Exactly as before (4-parameter Points Matrix System)
                                         if h_score == 0: health_status = "No Usage 🔴"
                                         elif h_score <= 3: health_status = "Low Usage 🟡"
                                         else: health_status = "Proper Usage 🟢"
