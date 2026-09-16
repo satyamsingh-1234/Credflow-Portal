@@ -37,9 +37,19 @@ if PERSISTENT_DB != REPO_DB:
         except Exception:
             pass
     elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Sync any missing interaction records from repo DB to persistent DB
+        # Sync sales_plan_history from clean_master_data.parquet if persistent DB has old bloated/duplicate batches
         try:
-            p_conn = sqlite3.connect(PERSISTENT_DB, timeout=10.0)
+            p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
+            cur = p_conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM sales_plan_history")
+            p_cnt = cur.fetchone()[0]
+            parquet_master = os.path.join(os.path.dirname(__file__), "clean_master_data.parquet")
+            if p_cnt != 5465 and os.path.exists(parquet_master):
+                clean_df = pd.read_parquet(parquet_master)
+                clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
+                p_conn.commit()
+
+            # Sync any missing interaction records from repo DB to persistent DB
             r_conn = sqlite3.connect(REPO_DB, timeout=10.0)
             r_df = pd.read_sql("SELECT * FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '') OR (follow_up IS NOT NULL AND follow_up != '')", r_conn)
             r_conn.close()
