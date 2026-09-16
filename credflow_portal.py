@@ -1385,7 +1385,7 @@ def prepare_eval_df(df_sales):
         login_yes = (l_raw != '' and l_raw != 'nan' and l_raw not in ['no', 'false', '0', 'none'])
 
         s_raw = str(row.get('Last Sync in 7 days', '')).strip().lower()
-        sync_yes = (s_raw and s_raw not in ['no', 'false', '0', 'nan', 'none', 'more than 15 days in sync', ''])
+        sync_yes = bool(s_raw and 'more' not in s_raw and s_raw not in ['no', 'false', '0', 'nan', 'none', ''])
 
         ct_raw = str(row.get('Contact details fetched in last 7 days', '0')).replace(',', '').strip()
         try:
@@ -1402,10 +1402,6 @@ def prepare_eval_df(df_sales):
         is_lite_plan = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
         if is_lite_plan and login_yes and sync_yes:
             return 'Proper Usage 🟢'
-
-        raw_h = str(row.get('Usage check', '')).strip()
-        if raw_h and any(h in raw_h for h in ['Proper', 'Low', 'No']):
-            return raw_h
 
         pts = 0
         plan_n = str(row.get('plan name', ''))
