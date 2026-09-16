@@ -3361,24 +3361,25 @@ with tab_upload:
 
                                 row['Credits used'] = c_val
 
-                                formatted_rows.append({
-                                    "S.No": s_no if i == 0 else "",
-                                    "Name": cx_name,
-                                    "phone": phone_display,
-                                    "lsq phone": lsq_phone,
-                                    "gst number": gst_num,
-                                    "email": email,
-                                    "plan name": plan_name,
-                                    "feature": feat,
-                                    "Plan Stat Date": plan_start,
-                                    "Plan End Date": plan_end,
-                                    "Usage check": health_status,
-                                    "Last Sync in 7 days": sync_7d,
-                                    "CP Usage in last 7 days": cp_7d,
-                                    "Contact details fetched in last 7 days": contact_7d,
-                                    "App login done in last 7 days": login_7d,
-                                    "raw_credits": c_val
-                                })
+                                for i, feat in enumerate(features):
+                                    formatted_rows.append({
+                                        "S.No": s_no if i == 0 else "",
+                                        "Name": cx_name,
+                                        "phone": phone_display,
+                                        "lsq phone": lsq_phone,
+                                        "gst number": gst_num,
+                                        "email": email,
+                                        "plan name": plan_name,
+                                        "feature": feat,
+                                        "Plan Stat Date": plan_start,
+                                        "Plan End Date": plan_end,
+                                        "Usage check": health_status,
+                                        "Last Sync in 7 days": sync_7d,
+                                        "CP Usage in last 7 days": cp_7d,
+                                        "Contact details fetched in last 7 days": contact_7d,
+                                        "App login done in last 7 days": login_7d,
+                                        "raw_credits": c_val
+                                    })
                                 s_no += 1
 
                             out_df = pd.DataFrame(formatted_rows)
