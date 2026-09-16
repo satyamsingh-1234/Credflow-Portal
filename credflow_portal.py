@@ -1352,24 +1352,15 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260916_clean"):
+def prepare_eval_df(df_sales, cache_key="v20260916_bvp_perfect"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    
-    # Normalize CP Usage labels to match new credit thresholds
-    if 'CP Usage in last 7 days' in filtered.columns:
-        cp_replacements = {
-            'More than 500': 'More than 1000',
-            'B/W 100 to 500': 'less than 500',
-            'less than 100': 'less than 500'
-        }
-        filtered['CP Usage in last 7 days'] = filtered['CP Usage in last 7 days'].replace(cp_replacements)
 
     eval_df = filtered.copy()
     
     ffill_cols = [
-        'Name', 'phone', 'plan name', 'Usage check', 
+        'Name', 'plan name', 'Usage check', 
         'Last Sync in 7 days', 'CP Usage in last 7 days', 
         'Contact details fetched in last 7 days', 
         'App login done in last 7 days', 'raw_credits', 
@@ -1377,10 +1368,7 @@ def prepare_eval_df(df_sales, cache_key="v20260916_clean"):
     ]
     for col in ffill_cols:
         if col in eval_df.columns:
-            if 'Upload_Batch' in eval_df.columns:
-                eval_df[col] = eval_df.groupby('Upload_Batch')[col].transform(lambda s: s.replace("", pd.NA).ffill())
-            else:
-                eval_df[col] = eval_df[col].replace("", pd.NA).ffill()
+            eval_df[col] = eval_df.groupby('phone')[col].transform(lambda s: s.replace("", pd.NA).ffill().bfill())
             if col in filtered.columns:
                 filtered[col] = eval_df[col]
             
