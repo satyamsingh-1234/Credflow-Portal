@@ -10,6 +10,9 @@ import time
 import os
 import re
 import urllib.parse
+import json
+import base64
+import requests
 
 logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
 if not os.path.exists(logo_path):
@@ -149,12 +152,32 @@ conn.execute('''CREATE TABLE IF NOT EXISTS outreach_logs (
     error_message TEXT DEFAULT ''
 )''')
 
+conn.execute('''CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)''')
+
 for col_name in ['last_email_sent_at', 'last_wa_sent_at', 'last_free_wa_sent_at', 'last_call_at']:
     try:
         conn.execute(f"ALTER TABLE customer_interactions ADD COLUMN {col_name} TEXT DEFAULT ''")
     except:
         pass
 conn.commit()
+
+def get_setting(key, default=""):
+    try:
+        cur = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
+        row = cur.fetchone()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    try:
+        conn.execute("INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, str(value)))
+        conn.commit()
+    except Exception:
+        pass
 
 def log_outreach_event(channel, health_tier, cx_name, phone, email, subject, status, error_msg=""):
     """
@@ -188,6 +211,12 @@ def log_outreach_event(channel, health_tier, cx_name, phone, email, subject, sta
                 VALUES (?, 1, ?)
                 ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, last_wa_sent_at = ?
             ''', (clean_p, now_str, now_str))
+        elif "Personal" in str(channel) or "Green" in str(channel) or "My WA" in str(channel):
+            conn.execute('''
+                INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, last_wa_sent_at, last_free_wa_sent_at)
+                VALUES (?, 1, 1, ?, ?)
+                ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1, last_wa_sent_at = ?, last_free_wa_sent_at = ?
+            ''', (clean_p, now_str, now_str, now_str, now_str))
         elif "Free" in str(channel):
             conn.execute('''
                 INSERT INTO customer_interactions (phone, free_wa_sent, last_free_wa_sent_at)
@@ -1089,21 +1118,12 @@ def send_callback_support_email(cx_name, cx_phone, cx_email, plan_name, follow_u
 
 
 # ── FREE WHATSAPP TEMPLATES ──
-def generate_wa_link(r):
-    import urllib.parse
-    import re
+def generate_wa_message_text(r):
     name = str(r.get('Name', '')).title()
     health = str(r.get('Usage check', ''))
     credits = str(r.get('raw_credits', '0'))
     phone = str(r.get('phone', '')).strip()
     plan_name = str(r.get('plan name', '')).strip()
-    if not phone: return None
-    
-    clean_p = str(phone).replace('.0', '').replace('+91', '').strip()
-    wa_phone = re.sub(r'\D', '', clean_p)
-    if len(wa_phone) > 10: wa_phone = wa_phone[-10:]
-    if len(wa_phone) == 10: wa_phone = "91" + wa_phone
-    else: return None
 
     inc_list, miss_list = build_feature_tick_lists(r)
     inc_bullet = "\n".join(inc_list) if inc_list else ""
@@ -1148,6 +1168,19 @@ def generate_wa_link(r):
             "upg_sec": upg_sec,
             "upg_link": upg_link
         })
+    return msg
+
+def generate_wa_link(r):
+    phone = str(r.get('phone', '')).strip()
+    if not phone: return None
+    
+    clean_p = str(phone).replace('.0', '').replace('+91', '').strip()
+    wa_phone = re.sub(r'\D', '', clean_p)
+    if len(wa_phone) > 10: wa_phone = wa_phone[-10:]
+    if len(wa_phone) == 10: wa_phone = "91" + wa_phone
+    else: return None
+
+    msg = generate_wa_message_text(r)
     encoded_msg = urllib.parse.quote(msg)
     return f"https://web.whatsapp.com/send?phone={wa_phone}&text={encoded_msg}"
 
@@ -1203,6 +1236,186 @@ def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
             for name, p, link in links_to_show:
                 st.markdown(f"- **{name}** (`{p}`): [👉 Open WhatsApp Chat ({p})]({link})")
 
+
+# ── PERSONAL WHATSAPP DIRECT GATEWAY (GREEN-API / QR CODE) ──
+def get_green_api_creds():
+    host = get_setting("green_api_host", "https://api.green-api.com").strip().rstrip('/')
+    if not host:
+        host = "https://api.green-api.com"
+    id_inst = get_setting("green_api_id_instance", "").strip()
+    token = get_setting("green_api_token_instance", "").strip()
+    return host, id_inst, token
+
+def get_green_api_state():
+    host, id_inst, token = get_green_api_creds()
+    if not id_inst or not token:
+        return "not_configured", "Instance ID ya API Token configure nahi hai."
+    url = f"{host}/waInstance{id_inst}/getStateInstance/{token}"
+    try:
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return data.get("stateInstance", "unknown"), data
+        return "error", f"HTTP {r.status_code}: {r.text}"
+    except Exception as e:
+        return "error", str(e)
+
+def get_green_api_qr():
+    host, id_inst, token = get_green_api_creds()
+    if not id_inst or not token:
+        return False, "Instance ID ya API Token missing hai."
+    url = f"{host}/waInstance{id_inst}/qr/{token}"
+    try:
+        r = requests.get(url, timeout=12)
+        if r.status_code == 200:
+            data = r.json()
+            t = data.get("type")
+            if t == "qrCode":
+                return True, data.get("message") # base64 encoded png
+            elif t == "alreadyLogged":
+                return "already_logged", "Aapka WhatsApp already authorized aur ready hai!"
+            return False, str(data)
+        return False, f"HTTP {r.status_code}: {r.text}"
+    except Exception as e:
+        return False, str(e)
+
+def logout_green_api():
+    host, id_inst, token = get_green_api_creds()
+    if not id_inst or not token:
+        return False, "Not configured"
+    url = f"{host}/waInstance{id_inst}/logout/{token}"
+    try:
+        r = requests.get(url, timeout=10)
+        return True, r.text
+    except Exception as e:
+        return False, str(e)
+
+def send_green_api_msg(phone, message_text):
+    host, id_inst, token = get_green_api_creds()
+    if not id_inst or not token:
+        return False, "Personal WhatsApp Gateway configure nahi hai. Kripya pehle QR scan karke link karein."
+    
+    clean_p = str(phone).replace('.0', '').replace('+91', '').strip()
+    wa_phone = re.sub(r'\D', '', clean_p)
+    if len(wa_phone) > 10:
+        wa_phone = wa_phone[-10:]
+    if len(wa_phone) != 10:
+        return False, f"Invalid 10-digit phone number: {phone}"
+    
+    chat_id = f"91{wa_phone}@c.us"
+    url = f"{host}/waInstance{id_inst}/sendMessage/{token}"
+    payload = {
+        "chatId": chat_id,
+        "message": message_text
+    }
+    headers = {"Content-Type": "application/json"}
+    try:
+        r = requests.post(url, json=payload, headers=headers, timeout=15)
+        if r.status_code in [200, 201]:
+            resp_data = r.json()
+            return True, resp_data.get("idMessage", "Sent")
+        return False, f"HTTP {r.status_code}: {r.text}"
+    except Exception as e:
+        return False, str(e)
+
+def render_personal_wa_connector(card_key="default"):
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%); border: 1px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <h4 style="color: #14532D; margin: 0; font-size: 17px; font-weight: 700;">📲 Link Personal WhatsApp (100% Free - Zero Per-Message Fees)</h4>
+                <p style="color: #166534; font-size: 13px; margin: 4px 0 0 0;">
+                    Apne phone number ko QR Code scan karke connect karein. Messages <b>100% automatically</b> direct aapke number se deliver honge — bina kisi Interakt wallet recharge ke!
+                </p>
+            </div>
+            <span style="background: #16A34A; color: #FFFFFF; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 700;">
+                ₹0 FOREVER FREE
+            </span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    cur_host, cur_id, cur_token = get_green_api_creds()
+    
+    # Status Check
+    state, details = get_green_api_state()
+    if state == "authorized":
+        st.success("🟢 **Status: CONNECTED & AUTHORIZED!** Aapka personal WhatsApp successfully linked hai. Table se direct auto-send karein.")
+    elif state == "notAuthorized":
+        st.warning("🟡 **Status: Not Authorized.** Kripya neeche **'📷 Show QR Code to Scan'** button dabakar apne phone ke WhatsApp se scan karein.")
+    elif state == "not_configured":
+        st.info("⚪ **Status: Not Configured.** Kripya Green-API credentials fill karke Save karein.")
+    else:
+        st.info(f"ℹ️ **Status**: `{state}` ({details})")
+
+    c_id, c_tok = st.columns(2)
+    with c_id:
+        new_id = st.text_input("Green-API Instance ID (idInstance)", value=cur_id, placeholder="e.g. 7103859201", key=f"gw_id_inst_{card_key}")
+    with c_tok:
+        new_token = st.text_input("Green-API API Token (apiTokenInstance)", value=cur_token, type="password", placeholder="e.g. d8f7a9c1e4b...", key=f"gw_tok_inst_{card_key}")
+
+    with st.expander("⚙️ Advanced Settings (API Host)", expanded=False):
+        new_host = st.text_input("API Host URL", value=cur_host if cur_host else "https://api.green-api.com", key=f"gw_host_inst_{card_key}")
+
+    b_save, b_qr, b_chk, b_out = st.columns([2, 3, 2, 2])
+    with b_save:
+        if st.button("💾 Save Credentials", type="primary", key=f"save_gw_creds_{card_key}", use_container_width=True):
+            set_setting("green_api_host", new_host.strip())
+            set_setting("green_api_id_instance", new_id.strip())
+            set_setting("green_api_token_instance", new_token.strip())
+            st.toast("✅ Credentials saved successfully!", icon="💾")
+            st.rerun()
+
+    with b_chk:
+        if st.button("🔄 Check Status", key=f"chk_gw_status_{card_key}", use_container_width=True):
+            st.rerun()
+
+    with b_qr:
+        show_qr_clicked = st.button("📷 Show QR Code to Scan", key=f"btn_show_qr_{card_key}", use_container_width=True)
+
+    with b_out:
+        if st.button("🔴 Logout / Unlink", key=f"btn_unlink_gw_{card_key}", use_container_width=True):
+            logout_green_api()
+            st.toast("Logged out from WhatsApp instance", icon="ℹ️")
+            st.rerun()
+
+    if show_qr_clicked:
+        if not new_id or not new_token:
+            st.warning("⚠️ Pehle upar Instance ID aur API Token enter karke '💾 Save Credentials' click karein.")
+        else:
+            with st.spinner("Fetching QR Code from WhatsApp gateway..."):
+                ok, qr_data = get_green_api_qr()
+            if ok is True:
+                try:
+                    img_bytes = base64.b64decode(qr_data)
+                    st.image(img_bytes, caption="📱 Scan this QR Code with WhatsApp on your phone", width=280)
+                    st.info("""
+                    **👉 Kaise Scan Karein:**
+                    1. Phone mein **WhatsApp** open karein.
+                    2. Right corner 3 dots (Android) ya Settings (iPhone) par tap karein.
+                    3. **Linked Devices** ➔ **Link a Device** par tap karein.
+                    4. Phone ka camera is QR code par point karein.
+                    5. Scan hone ke 5 second baad upar **'🔄 Check Status'** dabayein — status **🟢 Connected** ho jayega!
+                    """)
+                except Exception as ex:
+                    st.error(f"Error displaying QR image: {ex}")
+            elif ok == "already_logged":
+                st.success("✅ Aapka WhatsApp already authorized aur ready hai!")
+            else:
+                st.error(f"❌ QR code fetch nahi ho paya: {qr_data}")
+
+    with st.expander("📖 **1-Minute Free Setup Guide (₹0 Cost Forever - No Credit Card)**", expanded=False):
+        st.markdown("""
+        **Green-API Free Instance Setup (Keval 1 Minute):**
+        1. [https://green-api.com](https://green-api.com) par jayein aur **Sign In with Google** karein.
+        2. Free **Developer** tariff choose karein (ye hamesha free rehta hai aur unlimited testing/outreach ke liye kaafi hai).
+        3. Dashboard par aapko ek instance milega. Vahan se:
+           - **idInstance** copy karein
+           - **apiTokenInstance** copy karein
+        4. Upar dono fields mein paste karein aur **💾 Save Credentials** dabayein.
+        5. **📷 Show QR Code to Scan** dabayein aur apne phone ke WhatsApp se scan kar lein.
+        6. Bas! Ab aapka personal WhatsApp bind ho gaya.
+        """)
 
 # ── INTERAKT WHATSAPP API LOGIC ──
 def send_interakt_msg(phone, name, health, credits):
@@ -1900,8 +2113,40 @@ def render_crm(cx_df):
     # ── TEST SANDBOX ──────────────────────────────────────────────
     with st.expander("🧪 **Test Sandbox — Single Message Tester (WhatsApp & Email)**", expanded=False):
         st.markdown("💡 *Bulk sending se pehle apne number/email par test message bhej kar verfiy karein.*")
-        tab_wa, tab_email = st.tabs(["💬 Test WhatsApp API (Interakt)", "📧 Test Email (SMTP)"])
+        tab_pwa, tab_wa, tab_email = st.tabs(["📲 Test Personal WhatsApp (Free Gateway)", "💬 Test WhatsApp API (Interakt)", "📧 Test Email (SMTP)"])
         
+        with tab_pwa:
+            st.markdown("#### 📲 Send Test WhatsApp from Your Personal Phone")
+            tp1, tp2 = st.columns(2)
+            with tp1:
+                test_pwa_phone = st.text_input("Mobile Number (10 digit)", key="test_pwa_phone", placeholder="9876543210")
+            with tp2:
+                test_pwa_name = st.text_input("Customer Name", value="Test Customer", key="test_pwa_name")
+            tp3, tp4 = st.columns(2)
+            with tp3:
+                test_pwa_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_pwa_health")
+            with tp4:
+                test_pwa_plan = st.text_input("Plan Name", value="Enterprise Plan", key="test_pwa_plan")
+                
+            if st.button("🚀 Send Test WhatsApp via Personal Number", type="primary", key="btn_test_pwa", use_container_width=True):
+                if not test_pwa_phone or len(test_pwa_phone.strip()) < 10:
+                    st.warning("Kripya valid 10-digit mobile number dalein.")
+                else:
+                    test_row = {
+                        "Name": test_pwa_name,
+                        "phone": test_pwa_phone,
+                        "Usage check": test_pwa_health,
+                        "plan name": test_pwa_plan,
+                        "raw_credits": "500"
+                    }
+                    test_msg = generate_wa_message_text(test_row)
+                    with st.spinner("Sending test message from your personal WhatsApp..."):
+                        succ, res = send_green_api_msg(test_pwa_phone, test_msg)
+                    if succ:
+                        st.success(f"✅ Test WhatsApp message sent successfully to {test_pwa_phone} from your personal number!")
+                    else:
+                        st.error(f"❌ Failed to send: {res}")
+
         with tab_wa:
             st.markdown("#### 📲 Send Test WhatsApp via Interakt API")
             tc1, tc2 = st.columns(2)
@@ -2228,6 +2473,9 @@ def render_crm(cx_df):
         # -----------------------------
         ui_df = ui_df.reset_index(drop=True)
 
+        with st.expander("📲 **Link Personal WhatsApp (100% Free Auto-Send via QR Scan)**", expanded=False):
+            render_personal_wa_connector(card_key="crm_expander")
+
         c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 3])
         with c1:
             select_all_wa = st.checkbox('✅ Select All WA API', key='sel_all_wa')
@@ -2323,9 +2571,11 @@ def render_crm(cx_df):
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
 
-        btn1, btn2, btn3, btn4 = st.columns([3, 3, 3, 2])
+        btn_pwa, btn1, btn2, btn3, btn4 = st.columns([3.5, 3, 2.5, 2.5, 2])
+        with btn_pwa:
+            pwa_clicked = st.button("📲 Auto-Send via My WhatsApp", type="primary", use_container_width=True, help="100% Free! Sends automatically in the background directly from your own personal WhatsApp number linked via QR code.")
         with btn1:
-            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", type="primary", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
+            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
         with btn2:
             em_clicked = st.button("🚀 Send Emails (SMTP)", type="primary", use_container_width=True)
         with btn3:
@@ -2333,6 +2583,51 @@ def render_crm(cx_df):
         with btn4:
             excel_crm = to_excel_download(edited_df, sheet_name="CRM Data")
             st.download_button("📥 Export CRM", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+        if pwa_clicked:
+            selected_pwa_df = edited_df[(edited_df['📩 Send API'] == True) | (edited_df['📱 Send Free WA'] == True)]
+            if selected_pwa_df.empty:
+                st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein un users ke liye jinko personal WhatsApp se automatic message bhejna hai.")
+            else:
+                gw_state, _ = get_green_api_state()
+                if gw_state != "authorized":
+                    st.error("⚠️ **Personal WhatsApp linked nahi hai!** Kripya upar diye gaye '📲 Link Personal WhatsApp' expander ko open karke apna QR Code scan karein.")
+                else:
+                    success_count = 0
+                    error_count = 0
+                    total_pwa = len(selected_pwa_df)
+                    ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                    for idx, row in enumerate(selected_pwa_df.to_dict('records')):
+                        name = str(row.get('Name', 'Customer'))
+                        phone_raw = row.get('phone', '')
+                        msg_text = generate_wa_message_text(row)
+                        
+                        succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                        if succ:
+                            success_count += 1
+                            p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                            clean_digits = re.sub(r'\D', '', p)
+                            if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                            conn.execute('''
+                                INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                                VALUES (?, 1, 1)
+                                ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                            ''', (clean_digits,))
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                        else:
+                            error_count += 1
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                        
+                        update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                        if idx + 1 < total_pwa:
+                            time.sleep(3)
+                    
+                    conn.commit()
+                    if success_count > 0:
+                        st.success(f"✅ Successfully sent {success_count} messages directly from your personal WhatsApp number!")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
 
         if wa_clicked:
             selected_wa_df = edited_df[edited_df['📩 Send API'] == True]
@@ -2676,10 +2971,55 @@ def render_batch_comparison(conn):
             )
 
             # ── BULK ACTIONS (UPGRADED) ──
-            upg_b1, upg_b2, upg_b3 = st.columns(3)
-            with upg_b1: btn_wa_u = st.button("📱 Send via WA API", type="primary", use_container_width=True, key="btn_wa_u")
+            upg_b0, upg_b1, upg_b2, upg_b3 = st.columns(4)
+            with upg_b0: btn_pwa_u = st.button("📲 Send via My WhatsApp", type="primary", use_container_width=True, key="btn_pwa_u", help="100% Free! Sends automatically from your linked personal WhatsApp number.")
+            with upg_b1: btn_wa_u = st.button("📱 Send via WA API", use_container_width=True, key="btn_wa_u")
             with upg_b2: btn_em_u = st.button("📧 Send via Email", type="primary", use_container_width=True, key="btn_em_u")
             with upg_b3: btn_fw_u = st.button("💬 Send via Free WA", type="secondary", use_container_width=True, key="btn_fw_u")
+
+            if btn_pwa_u:
+                selected_pwa_u = upg_edited[(upg_edited['📩 Send API'] == True) | (upg_edited['📱 Send Free WA'] == True)]
+                if selected_pwa_u.empty:
+                    st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
+                else:
+                    gw_state, _ = get_green_api_state()
+                    if gw_state != "authorized":
+                        st.error("⚠️ Personal WhatsApp linked nahi hai! Kripya CRM tab mein '📲 Link Personal WhatsApp' expander se QR code scan karein.")
+                    else:
+                        success_count = 0
+                        error_count = 0
+                        total_pwa = len(selected_pwa_u)
+                        ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                        for idx, row in enumerate(selected_pwa_u.to_dict('records')):
+                            name = str(row.get('Name', 'Customer'))
+                            phone_raw = row.get('phone', '')
+                            row_copy = dict(row)
+                            row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
+                            msg_text = generate_wa_message_text(row_copy)
+                            succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                            if succ:
+                                success_count += 1
+                                p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                                clean_digits = re.sub(r'\D', '', p)
+                                if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                                conn.execute('''
+                                    INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                                    VALUES (?, 1, 1)
+                                    ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                                ''', (clean_digits,))
+                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                            else:
+                                error_count += 1
+                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                            update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                            if idx + 1 < total_pwa:
+                                time.sleep(3)
+                        conn.commit()
+                        if success_count > 0:
+                            st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
+                            import time
+                            time.sleep(1)
+                            st.rerun()
 
             if btn_wa_u:
                 selected_wa_u = upg_edited[upg_edited['✅ Send API'] == True]
@@ -2823,10 +3163,55 @@ def render_batch_comparison(conn):
             )
 
             # ── BULK ACTIONS (DEGRADED) ──
-            deg_b1, deg_b2, deg_b3 = st.columns(3)
-            with deg_b1: btn_wa_d = st.button("📱 Send via WA API", type="primary", use_container_width=True, key="btn_wa_d")
+            deg_b0, deg_b1, deg_b2, deg_b3 = st.columns(4)
+            with deg_b0: btn_pwa_d = st.button("📲 Send via My WhatsApp", type="primary", use_container_width=True, key="btn_pwa_d", help="100% Free! Sends automatically from your linked personal WhatsApp number.")
+            with deg_b1: btn_wa_d = st.button("📱 Send via WA API", use_container_width=True, key="btn_wa_d")
             with deg_b2: btn_em_d = st.button("📧 Send via Email", type="primary", use_container_width=True, key="btn_em_d")
             with deg_b3: btn_fw_d = st.button("💬 Send via Free WA", type="secondary", use_container_width=True, key="btn_fw_d")
+
+            if btn_pwa_d:
+                selected_pwa_d = deg_edited[(deg_edited['📩 Send API'] == True) | (deg_edited['📱 Send Free WA'] == True)]
+                if selected_pwa_d.empty:
+                    st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
+                else:
+                    gw_state, _ = get_green_api_state()
+                    if gw_state != "authorized":
+                        st.error("⚠️ Personal WhatsApp linked nahi hai! Kripya CRM tab mein '📲 Link Personal WhatsApp' expander se QR code scan karein.")
+                    else:
+                        success_count = 0
+                        error_count = 0
+                        total_pwa = len(selected_pwa_d)
+                        ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                        for idx, row in enumerate(selected_pwa_d.to_dict('records')):
+                            name = str(row.get('Name', 'Customer'))
+                            phone_raw = row.get('phone', '')
+                            row_copy = dict(row)
+                            row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
+                            msg_text = generate_wa_message_text(row_copy)
+                            succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                            if succ:
+                                success_count += 1
+                                p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                                clean_digits = re.sub(r'\D', '', p)
+                                if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                                conn.execute('''
+                                    INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                                    VALUES (?, 1, 1)
+                                    ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                                ''', (clean_digits,))
+                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                            else:
+                                error_count += 1
+                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                            update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                            if idx + 1 < total_pwa:
+                                time.sleep(3)
+                        conn.commit()
+                        if success_count > 0:
+                            st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
+                            import time
+                            time.sleep(1)
+                            st.rerun()
 
             if btn_wa_d:
                 selected_wa_d = deg_edited[deg_edited['📩 Send API'] == True]
@@ -2980,7 +3365,7 @@ def render_outreach_history(conn):
 
     # Today's Date Metrics
     emails_today = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE channel = 'Email' AND status = 'SUCCESS' AND date(timestamp) = date('now', 'localtime')").fetchone()[0]
-    wa_today = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE channel LIKE '%WA API%' AND status = 'SUCCESS' AND date(timestamp) = date('now', 'localtime')").fetchone()[0]
+    wa_today = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE (channel LIKE '%WA%' OR channel LIKE '%WhatsApp%') AND status = 'SUCCESS' AND date(timestamp) = date('now', 'localtime')").fetchone()[0]
     fwa_today = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE channel LIKE '%Free WA%' AND status = 'SUCCESS' AND date(timestamp) = date('now', 'localtime')").fetchone()[0]
     failed_today = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE status = 'FAILED' AND date(timestamp) = date('now', 'localtime')").fetchone()[0]
     total_emails = conn.execute("SELECT COUNT(*) FROM outreach_logs WHERE channel = 'Email' AND status = 'SUCCESS'").fetchone()[0]
@@ -2989,7 +3374,7 @@ def render_outreach_history(conn):
     with m1:
         st.metric("📧 Emails Today", f"{emails_today}", help="Successfully sent emails today")
     with m2:
-        st.metric("📱 WA API Today", f"{wa_today}", help="WhatsApp API messages sent today")
+        st.metric("📱 Total WA Today", f"{wa_today}", help="All WhatsApp messages (Personal + API) sent today")
     with m3:
         st.metric("💬 Free WA Today", f"{fwa_today}", help="Free WA web messages sent today")
     with m4:
@@ -3004,7 +3389,7 @@ def render_outreach_history(conn):
     with f1:
         dt_filter = st.selectbox("📅 Date Filter", ["Today", "Yesterday", "Last 7 Days", "All Time"], index=0, key="hist_dt_flt")
     with f2:
-        ch_filter = st.selectbox("📡 Dispatch Channel", ["All Channels", "Email", "WhatsApp API", "Free WhatsApp"], index=0, key="hist_ch_flt")
+        ch_filter = st.selectbox("📡 Dispatch Channel", ["All Channels", "Email", "Personal WhatsApp", "WhatsApp API", "Free WhatsApp"], index=0, key="hist_ch_flt")
     with f3:
         st_filter = st.selectbox("🎯 Status", ["All Statuses", "SUCCESS", "FAILED"], index=0, key="hist_st_flt")
     with f4:
@@ -3080,10 +3465,11 @@ def render_template_manager(conn):
     </div>
     """, unsafe_allow_html=True)
     
-    sub_tab_email, sub_tab_wa, sub_tab_interakt = st.tabs([
+    sub_tab_email, sub_tab_wa, sub_tab_pwa, sub_tab_interakt = st.tabs([
         "📧 Email Templates (SMTP)",
-        "💬 Free WhatsApp Web Templates",
-        "📲 Interakt WA API Templates"
+        "💬 WhatsApp Message Templates",
+        "📲 Personal WhatsApp Gateway (Free QR)",
+        "⚙️ Interakt WA API Config"
     ])
 
     sample_name = "Rajesh Sharma"
@@ -3193,6 +3579,11 @@ def render_template_manager(conn):
                     st.code(rendered_wa, language="markdown")
                 except Exception as ex:
                     st.error(f"Error rendering preview: {ex}")
+
+    with sub_tab_pwa:
+        st.markdown("#### 📲 Personal WhatsApp Gateway Setup (QR Code)")
+        st.info("💡 **100% Free WhatsApp Gateway**: Connect your personal or office WhatsApp number here. All automated messages will be dispatched directly through your own phone number without any third-party wallet deduction.")
+        render_personal_wa_connector(card_key="templates_tab")
 
     with sub_tab_interakt:
         st.markdown("#### 📲 Interakt WA API Templates")
