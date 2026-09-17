@@ -2532,33 +2532,42 @@ def render_crm(cx_df):
         with st.expander("📲 **Link Personal WhatsApp (100% Free Auto-Send via QR Scan)**", expanded=False):
             render_personal_wa_connector(card_key="crm_expander")
 
-        c1, c2, c3, c4, c5 = st.columns([2, 2, 2, 2, 3])
+        c1, c2, c3, c4, c5, c6 = st.columns([1.8, 1.8, 1.8, 2, 2, 2.6])
         with c1:
-            select_all_wa = st.checkbox('✅ Select All WA API', key='sel_all_wa')
+            select_all_wa = st.checkbox('✅ All WA API', key='sel_all_wa')
         with c2:
-            select_all_em = st.checkbox('✅ Select All Emails', key='sel_all_em')
+            select_all_em = st.checkbox('✅ All Emails', key='sel_all_em')
         with c3:
-            select_all_free_wa = st.checkbox('✅ Select All Free WA', key='sel_all_free_wa')
+            select_all_free_wa = st.checkbox('✅ All Free WA', key='sel_all_free_wa')
         with c4:
-            select_top_10 = st.checkbox('🔟 Select First 10 Only', key='sel_top_10')
+            select_top_50 = st.checkbox('⚡ Select Top 50', key='sel_top_50', help="Quickly select top 50 customers for safe WhatsApp outreach")
         with c5:
+            select_top_100 = st.checkbox('💯 Select Top 100', key='sel_top_100', help="Select top 100 customers in one click")
+        with c6:
             row_limit_opt = st.selectbox(
-                "⚡ Display Limit",
-                ["200 Rows (Fast ⚡)", "500 Rows", "1000 Rows", "All Records 🌐"],
+                "⚡ Sheet Display Limit",
+                ["50 Rows (Top 50 ⚡)", "100 Rows (Top 100 💯)", "200 Rows (Fast ⚡)", "500 Rows", "All Records 🌐"],
                 index=0,
                 key="crm_row_limit_selector",
                 help="Showing fewer rows on screen makes editing and filtering instant. Export button will still export ALL filtered records."
             )
 
-        if "200" in row_limit_opt: max_rows_limit = 200
-        elif "500" in row_limit_opt: max_rows_limit = 500
-        elif "1000" in row_limit_opt: max_rows_limit = 1000
+        if "50 Rows" in row_limit_opt: max_rows_limit = 50
+        elif "100 Rows" in row_limit_opt: max_rows_limit = 100
+        elif "200 Rows" in row_limit_opt: max_rows_limit = 200
+        elif "500 Rows" in row_limit_opt: max_rows_limit = 500
         else: max_rows_limit = len(ui_df)
 
-        if select_top_10:
-            ui_df.insert(0, '📩 Send API', [True if i < 10 else False for i in range(len(ui_df))])
-            ui_df.insert(1, '📨 Send Email', [True if i < 10 else False for i in range(len(ui_df))])
-            ui_df.insert(2, '📱 Send Free WA', [True if i < 10 else False for i in range(len(ui_df))])
+        batch_count = None
+        if select_top_50:
+            batch_count = 50
+        elif select_top_100:
+            batch_count = 100
+
+        if batch_count is not None:
+            ui_df.insert(0, '📩 Send API', [True if i < batch_count else False for i in range(len(ui_df))])
+            ui_df.insert(1, '📨 Send Email', [True if i < batch_count else False for i in range(len(ui_df))])
+            ui_df.insert(2, '📱 Send Free WA', [True if i < batch_count else False for i in range(len(ui_df))])
         else:
             ui_df.insert(0, '📩 Send API', select_all_wa)
             ui_df.insert(1, '📨 Send Email', select_all_em)
