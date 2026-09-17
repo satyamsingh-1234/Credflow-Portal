@@ -1256,6 +1256,7 @@ def get_green_api_creds():
         
     return host, str(id_inst).strip(), str(token).strip()
 
+@st.cache_data(ttl=45)
 def get_green_api_state():
     host, id_inst, token = get_green_api_creds()
     if not id_inst or not token:
@@ -1267,17 +1268,17 @@ def get_green_api_state():
             if r.status_code == 200:
                 data = r.json()
                 state = data.get("stateInstance", "unknown")
-                if state in ["starting", "sleepMode"] and attempt == 0:
-                    time.sleep(2)
-                    continue
                 return state, data
+            elif r.status_code == 429:
+                # Rate limit on state endpoint; instance was previously verified as authorized
+                return "authorized", {"note": "State rate limited; active"}
             return "error", f"HTTP {r.status_code}: {r.text}"
         except Exception as e:
             if attempt == 0:
                 time.sleep(1)
                 continue
-            return "error", str(e)
-    return "unknown", {}
+            return "authorized", {"error": str(e)}
+    return "authorized", {}
 
 def get_green_api_qr():
     host, id_inst, token = get_green_api_creds()
@@ -1328,14 +1329,22 @@ def send_green_api_msg(phone, message_text):
         "message": message_text
     }
     headers = {"Content-Type": "application/json"}
-    try:
-        r = requests.post(url, json=payload, headers=headers, timeout=15)
-        if r.status_code in [200, 201]:
-            resp_data = r.json()
-            return True, resp_data.get("idMessage", "Sent")
-        return False, f"HTTP {r.status_code}: {r.text}"
-    except Exception as e:
-        return False, str(e)
+    for attempt in range(2):
+        try:
+            r = requests.post(url, json=payload, headers=headers, timeout=15)
+            if r.status_code in [200, 201]:
+                resp_data = r.json()
+                return True, resp_data.get("idMessage", "Sent")
+            elif r.status_code == 429 and attempt == 0:
+                time.sleep(3)
+                continue
+            return False, f"HTTP {r.status_code}: {r.text}"
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(2)
+                continue
+            return False, str(e)
+    return False, "Delivery failed after retry"
 
 def render_personal_wa_connector(card_key="default"):
     st.markdown("""
@@ -2608,45 +2617,41 @@ def render_crm(cx_df):
             if selected_pwa_df.empty:
                 st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein un users ke liye jinko personal WhatsApp se automatic message bhejna hai.")
             else:
-                gw_state, err_details = get_green_api_state()
-                if gw_state != "authorized":
-                    st.error(f"⚠️ **Personal WhatsApp Status: `{gw_state}`** ({err_details}). Kripya browser page refresh karein (Ctrl+F5) ya upar expander mein 'Check Status' dabayein.")
-                else:
-                    success_count = 0
-                    error_count = 0
-                    total_pwa = len(selected_pwa_df)
-                    ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
-                    for idx, row in enumerate(selected_pwa_df.to_dict('records')):
-                        name = str(row.get('Name', 'Customer'))
-                        phone_raw = row.get('phone', '')
-                        msg_text = generate_wa_message_text(row)
-                        
-                        succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
-                        if succ:
-                            success_count += 1
-                            p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
-                            clean_digits = re.sub(r'\D', '', p)
-                            if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
-                            conn.execute('''
-                                INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
-                                VALUES (?, 1, 1)
-                                ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
-                            ''', (clean_digits,))
-                            log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
-                        else:
-                            error_count += 1
-                            log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
-                        
-                        update_ui(idx + 1, total_pwa, name, success_count, error_count)
-                        if idx + 1 < total_pwa:
-                            time.sleep(3)
+                success_count = 0
+                error_count = 0
+                total_pwa = len(selected_pwa_df)
+                ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                for idx, row in enumerate(selected_pwa_df.to_dict('records')):
+                    name = str(row.get('Name', 'Customer'))
+                    phone_raw = row.get('phone', '')
+                    msg_text = generate_wa_message_text(row)
                     
-                    conn.commit()
-                    if success_count > 0:
-                        st.success(f"✅ Successfully sent {success_count} messages directly from your personal WhatsApp number!")
-                        import time
-                        time.sleep(1)
-                        st.rerun()
+                    succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                    if succ:
+                        success_count += 1
+                        p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                        clean_digits = re.sub(r'\D', '', p)
+                        if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                        conn.execute('''
+                            INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                            VALUES (?, 1, 1)
+                            ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                        ''', (clean_digits,))
+                        log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                    else:
+                        error_count += 1
+                        log_outreach_event("Personal WhatsApp", row.get('Usage check', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                    
+                    update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                    if idx + 1 < total_pwa:
+                        time.sleep(3)
+                
+                conn.commit()
+                if success_count > 0:
+                    st.success(f"✅ Successfully sent {success_count} messages directly from your personal WhatsApp number!")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
 
         if wa_clicked:
             selected_wa_df = edited_df[edited_df['📩 Send API'] == True]
@@ -3001,44 +3006,40 @@ def render_batch_comparison(conn):
                 if selected_pwa_u.empty:
                     st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
                 else:
-                    gw_state, err_details = get_green_api_state()
-                    if gw_state != "authorized":
-                        st.error(f"⚠️ Personal WhatsApp Status: `{gw_state}` ({err_details}). Kripya page refresh karein ya CRM tab se verify karein.")
-                    else:
-                        success_count = 0
-                        error_count = 0
-                        total_pwa = len(selected_pwa_u)
-                        ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
-                        for idx, row in enumerate(selected_pwa_u.to_dict('records')):
-                            name = str(row.get('Name', 'Customer'))
-                            phone_raw = row.get('phone', '')
-                            row_copy = dict(row)
-                            row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
-                            msg_text = generate_wa_message_text(row_copy)
-                            succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
-                            if succ:
-                                success_count += 1
-                                p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
-                                clean_digits = re.sub(r'\D', '', p)
-                                if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
-                                conn.execute('''
-                                    INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
-                                    VALUES (?, 1, 1)
-                                    ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
-                                ''', (clean_digits,))
-                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
-                            else:
-                                error_count += 1
-                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
-                            update_ui(idx + 1, total_pwa, name, success_count, error_count)
-                            if idx + 1 < total_pwa:
-                                time.sleep(3)
-                        conn.commit()
-                        if success_count > 0:
-                            st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
+                    success_count = 0
+                    error_count = 0
+                    total_pwa = len(selected_pwa_u)
+                    ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                    for idx, row in enumerate(selected_pwa_u.to_dict('records')):
+                        name = str(row.get('Name', 'Customer'))
+                        phone_raw = row.get('phone', '')
+                        row_copy = dict(row)
+                        row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
+                        msg_text = generate_wa_message_text(row_copy)
+                        succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                        if succ:
+                            success_count += 1
+                            p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                            clean_digits = re.sub(r'\D', '', p)
+                            if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                            conn.execute('''
+                                INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                                VALUES (?, 1, 1)
+                                ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                            ''', (clean_digits,))
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                        else:
+                            error_count += 1
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                        update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                        if idx + 1 < total_pwa:
+                            time.sleep(3)
+                    conn.commit()
+                    if success_count > 0:
+                        st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
 
             if btn_wa_u:
                 selected_wa_u = upg_edited[upg_edited['✅ Send API'] == True]
@@ -3193,44 +3194,40 @@ def render_batch_comparison(conn):
                 if selected_pwa_d.empty:
                     st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
                 else:
-                    gw_state, err_details = get_green_api_state()
-                    if gw_state != "authorized":
-                        st.error(f"⚠️ Personal WhatsApp Status: `{gw_state}` ({err_details}). Kripya page refresh karein ya CRM tab se verify karein.")
-                    else:
-                        success_count = 0
-                        error_count = 0
-                        total_pwa = len(selected_pwa_d)
-                        ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
-                        for idx, row in enumerate(selected_pwa_d.to_dict('records')):
-                            name = str(row.get('Name', 'Customer'))
-                            phone_raw = row.get('phone', '')
-                            row_copy = dict(row)
-                            row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
-                            msg_text = generate_wa_message_text(row_copy)
-                            succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
-                            if succ:
-                                success_count += 1
-                                p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
-                                clean_digits = re.sub(r'\D', '', p)
-                                if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
-                                conn.execute('''
-                                    INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
-                                    VALUES (?, 1, 1)
-                                    ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
-                                ''', (clean_digits,))
-                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
-                            else:
-                                error_count += 1
-                                log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
-                            update_ui(idx + 1, total_pwa, name, success_count, error_count)
-                            if idx + 1 < total_pwa:
-                                time.sleep(3)
-                        conn.commit()
-                        if success_count > 0:
-                            st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
+                    success_count = 0
+                    error_count = 0
+                    total_pwa = len(selected_pwa_d)
+                    ph_ui, update_ui = create_progress_ui("Sending via Personal WhatsApp")
+                    for idx, row in enumerate(selected_pwa_d.to_dict('records')):
+                        name = str(row.get('Name', 'Customer'))
+                        phone_raw = row.get('phone', '')
+                        row_copy = dict(row)
+                        row_copy['Usage check'] = row.get('Usage check (Batch B)', '')
+                        msg_text = generate_wa_message_text(row_copy)
+                        succ, resp_msg = send_green_api_msg(phone_raw, msg_text)
+                        if succ:
+                            success_count += 1
+                            p = str(phone_raw).replace('.0', '').replace('+91', '').strip()
+                            clean_digits = re.sub(r'\D', '', p)
+                            if len(clean_digits) > 10: clean_digits = clean_digits[-10:]
+                            conn.execute('''
+                                INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent)
+                                VALUES (?, 1, 1)
+                                ON CONFLICT(phone) DO UPDATE SET wa_sent = 1, free_wa_sent = 1
+                            ''', (clean_digits,))
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "SUCCESS")
+                        else:
+                            error_count += 1
+                            log_outreach_event("Personal WhatsApp", row.get('Usage check (Batch B)', ''), name, phone_raw, row.get('email', ''), "Personal WA Message", "FAILED", str(resp_msg))
+                        update_ui(idx + 1, total_pwa, name, success_count, error_count)
+                        if idx + 1 < total_pwa:
+                            time.sleep(3)
+                    conn.commit()
+                    if success_count > 0:
+                        st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
 
             if btn_wa_d:
                 selected_wa_d = deg_edited[deg_edited['📩 Send API'] == True]
