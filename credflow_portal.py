@@ -168,7 +168,9 @@ def get_setting(key, default=""):
     try:
         cur = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,))
         row = cur.fetchone()
-        return row[0] if row else default
+        if row and row[0] is not None and str(row[0]).strip() != "":
+            return str(row[0]).strip()
+        return default
     except Exception:
         return default
 
@@ -1239,26 +1241,43 @@ def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
 
 # ── PERSONAL WHATSAPP DIRECT GATEWAY (GREEN-API / QR CODE) ──
 def get_green_api_creds():
-    host = get_setting("green_api_host", "https://api.green-api.com").strip().rstrip('/')
-    if not host:
+    host = get_setting("green_api_host", "https://api.green-api.com")
+    if not host or not str(host).strip():
         host = "https://api.green-api.com"
-    id_inst = get_setting("green_api_id_instance", "710722739217").strip()
-    token = get_setting("green_api_token_instance", "2531af6471794e0a845b72348d7d24beab6f7b1ee7224c3887").strip()
-    return host, id_inst, token
+    host = str(host).strip().rstrip('/')
+    
+    id_inst = get_setting("green_api_id_instance", "710722739217")
+    if not id_inst or not str(id_inst).strip():
+        id_inst = "710722739217"
+        
+    token = get_setting("green_api_token_instance", "2531af6471794e0a845b72348d7d24beab6f7b1ee7224c3887")
+    if not token or not str(token).strip():
+        token = "2531af6471794e0a845b72348d7d24beab6f7b1ee7224c3887"
+        
+    return host, str(id_inst).strip(), str(token).strip()
 
 def get_green_api_state():
     host, id_inst, token = get_green_api_creds()
     if not id_inst or not token:
         return "not_configured", "Instance ID ya API Token configure nahi hai."
     url = f"{host}/waInstance{id_inst}/getStateInstance/{token}"
-    try:
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            return data.get("stateInstance", "unknown"), data
-        return "error", f"HTTP {r.status_code}: {r.text}"
-    except Exception as e:
-        return "error", str(e)
+    for attempt in range(2):
+        try:
+            r = requests.get(url, timeout=12)
+            if r.status_code == 200:
+                data = r.json()
+                state = data.get("stateInstance", "unknown")
+                if state in ["starting", "sleepMode"] and attempt == 0:
+                    time.sleep(2)
+                    continue
+                return state, data
+            return "error", f"HTTP {r.status_code}: {r.text}"
+        except Exception as e:
+            if attempt == 0:
+                time.sleep(1)
+                continue
+            return "error", str(e)
+    return "unknown", {}
 
 def get_green_api_qr():
     host, id_inst, token = get_green_api_creds()
@@ -2589,9 +2608,9 @@ def render_crm(cx_df):
             if selected_pwa_df.empty:
                 st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein un users ke liye jinko personal WhatsApp se automatic message bhejna hai.")
             else:
-                gw_state, _ = get_green_api_state()
+                gw_state, err_details = get_green_api_state()
                 if gw_state != "authorized":
-                    st.error("⚠️ **Personal WhatsApp linked nahi hai!** Kripya upar diye gaye '📲 Link Personal WhatsApp' expander ko open karke apna QR Code scan karein.")
+                    st.error(f"⚠️ **Personal WhatsApp Status: `{gw_state}`** ({err_details}). Kripya browser page refresh karein (Ctrl+F5) ya upar expander mein 'Check Status' dabayein.")
                 else:
                     success_count = 0
                     error_count = 0
@@ -2982,9 +3001,9 @@ def render_batch_comparison(conn):
                 if selected_pwa_u.empty:
                     st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
                 else:
-                    gw_state, _ = get_green_api_state()
+                    gw_state, err_details = get_green_api_state()
                     if gw_state != "authorized":
-                        st.error("⚠️ Personal WhatsApp linked nahi hai! Kripya CRM tab mein '📲 Link Personal WhatsApp' expander se QR code scan karein.")
+                        st.error(f"⚠️ Personal WhatsApp Status: `{gw_state}` ({err_details}). Kripya page refresh karein ya CRM tab se verify karein.")
                     else:
                         success_count = 0
                         error_count = 0
@@ -3174,9 +3193,9 @@ def render_batch_comparison(conn):
                 if selected_pwa_d.empty:
                     st.warning("Pehle table mein se '📩 Send API' ya '📱 Send Free WA' check box tick karein.")
                 else:
-                    gw_state, _ = get_green_api_state()
+                    gw_state, err_details = get_green_api_state()
                     if gw_state != "authorized":
-                        st.error("⚠️ Personal WhatsApp linked nahi hai! Kripya CRM tab mein '📲 Link Personal WhatsApp' expander se QR code scan karein.")
+                        st.error(f"⚠️ Personal WhatsApp Status: `{gw_state}` ({err_details}). Kripya page refresh karein ya CRM tab se verify karein.")
                     else:
                         success_count = 0
                         error_count = 0
