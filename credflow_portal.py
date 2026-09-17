@@ -3264,7 +3264,7 @@ with tab_upload:
 
             if action == "📤 Upload New Master Data":
                 st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
-                uploaded_file = st.file_uploader("📂 Upload Raw Sales Data", type=["csv", "xlsx"])
+                uploaded_file = st.file_uploader("📂 Upload Raw Sales Data", type=["csv", "xlsx", "xls", "txt"])
 
                 if uploaded_file:
                     file_id = getattr(uploaded_file, 'file_id', uploaded_file.name + str(uploaded_file.size))
@@ -3272,7 +3272,42 @@ with tab_upload:
                     if st.session_state.get('last_processed_file_id') != file_id:
                         try:
                             import pandas as pd
-                            s_df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
+
+                            def _load_raw_file(u_file):
+                                fn = getattr(u_file, 'name', '').lower()
+                                u_file.seek(0)
+                                # 1. If file extension indicates CSV/TXT, try CSV with common encodings
+                                if fn.endswith(('.csv', '.txt')):
+                                    for enc in ['utf-8', 'latin1', 'cp1252', 'utf-8-sig']:
+                                        try:
+                                            u_file.seek(0)
+                                            return pd.read_csv(u_file, encoding=enc)
+                                        except Exception:
+                                            pass
+
+                                # 2. Try Excel formats (openpyxl first)
+                                for eng in ['openpyxl', None]:
+                                    try:
+                                        u_file.seek(0)
+                                        if eng:
+                                            return pd.read_excel(u_file, engine=eng)
+                                        else:
+                                            return pd.read_excel(u_file)
+                                    except Exception:
+                                        pass
+
+                                # 3. Fallback to read_csv (for CSV disguised as .xlsx or format cannot be determined)
+                                for enc in ['utf-8', 'latin1', 'cp1252', 'utf-8-sig']:
+                                    try:
+                                        u_file.seek(0)
+                                        return pd.read_csv(u_file, encoding=enc)
+                                    except Exception:
+                                        pass
+
+                                u_file.seek(0)
+                                return pd.read_csv(u_file, on_bad_lines='skip')
+
+                            s_df = _load_raw_file(uploaded_file)
 
                             # Recover missing headers from the raw CSV dump
                             if 'Unnamed: 33' in s_df.columns: s_df.rename(columns={'Unnamed: 33': 'syncing_status'}, inplace=True)
