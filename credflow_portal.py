@@ -1338,6 +1338,8 @@ def send_green_api_msg(phone, message_text):
             elif r.status_code == 429 and attempt == 0:
                 time.sleep(3)
                 continue
+            if "CORRESPONDENTS_QUOTE_EXCEEDED" in r.text or "quota has been exceeded" in r.text.lower():
+                return False, "⚠️ Green-API Free Tier limit (Max 3 unique contacts). Kripya 'Export Desktop Queue' use karein jo 100% Free aur Unlimited hai!"
             return False, f"HTTP {r.status_code}: {r.text}"
         except Exception as e:
             if attempt == 0:
@@ -1345,6 +1347,26 @@ def send_green_api_msg(phone, message_text):
                 continue
             return False, str(e)
     return False, "Delivery failed after retry"
+
+def make_desktop_queue_json(df_records, usage_col='Usage check'):
+    items = []
+    for row in df_records:
+        r = dict(row)
+        if usage_col != 'Usage check' and usage_col in r:
+            r['Usage check'] = r[usage_col]
+        name = str(r.get('Name', 'Customer')).strip()
+        phone = str(r.get('phone', '')).replace('.0', '').strip()
+        clean_p = re.sub(r'\D', '', phone)
+        if len(clean_p) > 10:
+            clean_p = clean_p[-10:]
+        msg = generate_wa_message_text(r)
+        items.append({
+            "name": name,
+            "phone": clean_p,
+            "message": msg,
+            "usage": str(r.get('Usage check', ''))
+        })
+    return json.dumps(items, ensure_ascii=False, indent=2)
 
 def render_personal_wa_connector(card_key="default"):
     st.markdown("""
@@ -1432,17 +1454,23 @@ def render_personal_wa_connector(card_key="default"):
             else:
                 st.error(f"❌ QR code fetch nahi ho paya: {qr_data}")
 
-    with st.expander("📖 **1-Minute Free Setup Guide (₹0 Cost Forever - No Credit Card)**", expanded=False):
+    with st.expander("📖 **WhatsApp Outreach Guide (Desktop Auto-Sender vs Green-API)**", expanded=False):
         st.markdown("""
-        **Green-API Free Instance Setup (Keval 1 Minute):**
+        ### 🌟 Option 1: Desktop Auto-Sender (100% Free & UNLIMITED - Recommended)
+        Aapke Windows PC par **CredFlow Desktop Auto-Sender** already install ho chuka hai!
+        1. CRM table mein jitne chahe customers select karein aur **'🖥️ Export Desktop Queue'** click karein (`wa_desktop_queue.json` aapke Downloads folder mein save hoga).
+        2. Apne computer ke **Desktop** par jayein aur **`CredFlow_WhatsApp_AutoSender`** icon par double-click karein.
+        3. App automatically file detect kar lega. Bas **'🚀 Start Auto-Sending'** dabayein!
+        4. Chrome WhatsApp Web open karke safe anti-spam intervals ke sath sabhi customers ko automatically message send kar dega.
+        - **Limits:** Bilkul zero limit (₹0 cost forever, 50, 100, ya 500+ messages bhejein)!
+
+        ---
+        ### 📲 Option 2: Green-API Cloud Gateway (Quick Testing)
         1. [https://green-api.com](https://green-api.com) par jayein aur **Sign In with Google** karein.
-        2. Free **Developer** tariff choose karein (ye hamesha free rehta hai aur unlimited testing/outreach ke liye kaafi hai).
-        3. Dashboard par aapko ek instance milega. Vahan se:
-           - **idInstance** copy karein
-           - **apiTokenInstance** copy karein
-        4. Upar dono fields mein paste karein aur **💾 Save Credentials** dabayein.
-        5. **📷 Show QR Code to Scan** dabayein aur apne phone ke WhatsApp se scan kar lein.
-        6. Bas! Ab aapka personal WhatsApp bind ho gaya.
+        2. Free **Developer** tariff choose karein.
+        3. Dashboard se **idInstance** aur **apiTokenInstance** copy karke upar paste karein aur **💾 Save Credentials** dabayein.
+        4. **📷 Show QR Code to Scan** dabakar phone ke WhatsApp se scan kar lein.
+        - **Note:** Free Developer tariff has a monthly limit of 3 unique numbers. Bulk outreach ke liye Option 1 (Desktop Auto-Sender) best hai!
         """)
 
 # ── INTERAKT WHATSAPP API LOGIC ──
@@ -2599,18 +2627,38 @@ def render_crm(cx_df):
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
 
-        btn_pwa, btn1, btn2, btn3, btn4 = st.columns([3.5, 3, 2.5, 2.5, 2])
-        with btn_pwa:
-            pwa_clicked = st.button("📲 Auto-Send via My WhatsApp", type="primary", use_container_width=True, help="100% Free! Sends automatically in the background directly from your own personal WhatsApp number linked via QR code.")
-        with btn1:
-            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
-        with btn2:
-            em_clicked = st.button("🚀 Send Emails (SMTP)", type="primary", use_container_width=True)
-        with btn3:
-            free_wa_clicked = st.button("💬 Free WA (Web Links)", type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links without requiring wallet balance")
-        with btn4:
+        # Prepare selection for Desktop Auto-Sender and Green-API
+        selected_pwa_df = edited_df[(edited_df['📩 Send API'] == True) | (edited_df['📱 Send Free WA'] == True)]
+        desktop_queue_json = make_desktop_queue_json(selected_pwa_df.to_dict('records')) if not selected_pwa_df.empty else "[]"
+        count_selected = len(selected_pwa_df)
+
+        col_dt, col_pwa, col_crm = st.columns([3.5, 3.5, 3])
+        with col_dt:
+            st.download_button(
+                f"🖥️ Export Desktop Queue ({count_selected})",
+                data=desktop_queue_json,
+                file_name="wa_desktop_queue.json",
+                mime="application/json",
+                type="primary" if count_selected > 0 else "secondary",
+                use_container_width=True,
+                help="🌟 100% Free & Unlimited! Downloads 'wa_desktop_queue.json' directly to your Downloads folder. Then run 'CredFlow_WhatsApp_AutoSender' on your Desktop to dispatch automatically without any limits!"
+            )
+        with col_pwa:
+            pwa_clicked = st.button("📲 Auto-Send via Green-API", use_container_width=True, help="Cloud API Gateway send. (Note: Free Green-API account is limited to 3 contacts/month)")
+        with col_crm:
             excel_crm = to_excel_download(edited_df, sheet_name="CRM Data")
-            st.download_button("📥 Export CRM", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+            st.download_button("📥 Export CRM Excel", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+        col1, col2, col3 = st.columns([3.5, 3.5, 3])
+        with col1:
+            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
+        with col2:
+            em_clicked = st.button("🚀 Send Emails (SMTP)", type="secondary", use_container_width=True)
+        with col3:
+            free_wa_clicked = st.button("💬 Free WA (Web Links)", type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links without requiring wallet balance")
+
+        if count_selected > 0:
+            st.info(f"💡 **Unlimited Free Auto-Sending:** {count_selected} customers selected! Click **'🖥️ Export Desktop Queue'** above ➔ Open **'CredFlow_WhatsApp_AutoSender'** on your Desktop ➔ Click **'🚀 Start Auto-Sending'**.")
 
         if pwa_clicked:
             selected_pwa_df = edited_df[(edited_df['📩 Send API'] == True) | (edited_df['📱 Send Free WA'] == True)]
@@ -2992,11 +3040,26 @@ def render_batch_comparison(conn):
             )
 
             # ── BULK ACTIONS (UPGRADED) ──
-            upg_b0, upg_b1, upg_b2, upg_b3 = st.columns(4)
-            with upg_b0: btn_pwa_u = st.button("📲 Send via My WhatsApp", type="primary", use_container_width=True, key="btn_pwa_u", help="100% Free! Sends automatically from your linked personal WhatsApp number.")
+            selected_pwa_u = upg_edited[(upg_edited['📩 Send API'] == True) | (upg_edited['📱 Send Free WA'] == True)]
+            dt_queue_u = make_desktop_queue_json(selected_pwa_u.to_dict('records'), usage_col='Usage check (Batch B)') if not selected_pwa_u.empty else "[]"
+            count_u = len(selected_pwa_u)
+
+            upg_b_dt, upg_b0, upg_b1, upg_b2, upg_b3 = st.columns([3, 2.5, 2, 2, 2])
+            with upg_b_dt:
+                st.download_button(
+                    f"🖥️ Export Desktop Queue ({count_u})",
+                    data=dt_queue_u,
+                    file_name="wa_desktop_queue.json",
+                    mime="application/json",
+                    type="primary" if count_u > 0 else "secondary",
+                    use_container_width=True,
+                    key="btn_dt_u",
+                    help="🌟 100% Free & Unlimited! Downloads 'wa_desktop_queue.json' for the Desktop Auto-Sender app."
+                )
+            with upg_b0: btn_pwa_u = st.button("📲 Send via Green-API", use_container_width=True, key="btn_pwa_u", help="Sends via cloud gateway (Free Green-API limit: 3 contacts/month)")
             with upg_b1: btn_wa_u = st.button("📱 Send via WA API", use_container_width=True, key="btn_wa_u")
-            with upg_b2: btn_em_u = st.button("📧 Send via Email", type="primary", use_container_width=True, key="btn_em_u")
-            with upg_b3: btn_fw_u = st.button("💬 Send via Free WA", type="secondary", use_container_width=True, key="btn_fw_u")
+            with upg_b2: btn_em_u = st.button("📧 Send via Email", type="secondary", use_container_width=True, key="btn_em_u")
+            with upg_b3: btn_fw_u = st.button("💬 Free WA Links", type="secondary", use_container_width=True, key="btn_fw_u")
 
             if btn_pwa_u:
                 selected_pwa_u = upg_edited[(upg_edited['📩 Send API'] == True) | (upg_edited['📱 Send Free WA'] == True)]
@@ -3177,11 +3240,26 @@ def render_batch_comparison(conn):
             )
 
             # ── BULK ACTIONS (DEGRADED) ──
-            deg_b0, deg_b1, deg_b2, deg_b3 = st.columns(4)
-            with deg_b0: btn_pwa_d = st.button("📲 Send via My WhatsApp", type="primary", use_container_width=True, key="btn_pwa_d", help="100% Free! Sends automatically from your linked personal WhatsApp number.")
+            selected_pwa_d = deg_edited[(deg_edited['📩 Send API'] == True) | (deg_edited['📱 Send Free WA'] == True)]
+            dt_queue_d = make_desktop_queue_json(selected_pwa_d.to_dict('records'), usage_col='Usage check (Batch B)') if not selected_pwa_d.empty else "[]"
+            count_d = len(selected_pwa_d)
+
+            deg_b_dt, deg_b0, deg_b1, deg_b2, deg_b3 = st.columns([3, 2.5, 2, 2, 2])
+            with deg_b_dt:
+                st.download_button(
+                    f"🖥️ Export Desktop Queue ({count_d})",
+                    data=dt_queue_d,
+                    file_name="wa_desktop_queue.json",
+                    mime="application/json",
+                    type="primary" if count_d > 0 else "secondary",
+                    use_container_width=True,
+                    key="btn_dt_d",
+                    help="🌟 100% Free & Unlimited! Downloads 'wa_desktop_queue.json' for the Desktop Auto-Sender app."
+                )
+            with deg_b0: btn_pwa_d = st.button("📲 Send via Green-API", use_container_width=True, key="btn_pwa_d", help="Sends via cloud gateway (Free Green-API limit: 3 contacts/month)")
             with deg_b1: btn_wa_d = st.button("📱 Send via WA API", use_container_width=True, key="btn_wa_d")
-            with deg_b2: btn_em_d = st.button("📧 Send via Email", type="primary", use_container_width=True, key="btn_em_d")
-            with deg_b3: btn_fw_d = st.button("💬 Send via Free WA", type="secondary", use_container_width=True, key="btn_fw_d")
+            with deg_b2: btn_em_d = st.button("📧 Send via Email", type="secondary", use_container_width=True, key="btn_em_d")
+            with deg_b3: btn_fw_d = st.button("💬 Free WA Links", type="secondary", use_container_width=True, key="btn_fw_d")
 
             if btn_pwa_d:
                 selected_pwa_d = deg_edited[(deg_edited['📩 Send API'] == True) | (deg_edited['📱 Send Free WA'] == True)]
