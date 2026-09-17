@@ -1909,25 +1909,8 @@ def render_dashboard(df_sales, prefix):
         
     filtered = filtered_base.copy()
     eval_df = eval_df_base.copy()
-            
-    if search_q:
-        mask = (eval_df['Name'].astype(str).str.contains(search_q, case=False, na=False) |
-                eval_df['phone'].astype(str).str.contains(search_q, case=False, na=False))
-        m_phones = eval_df[mask]['phone'].unique()
-        filtered = filtered[filtered['phone'].isin(m_phones)]
-        eval_df = eval_df[eval_df['phone'].isin(m_phones)]
-        
-    if plan_filt:
-        valid_plan_phones = eval_df[eval_df['plan name'].isin(plan_filt)]['phone'].unique()
-        filtered = filtered[filtered['phone'].isin(valid_plan_phones)]
-        eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
-        
-    if usage_filt:
-        latest_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')
-        valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
-        filtered = filtered[filtered['phone'].isin(valid_usage_phones)]
-        eval_df = eval_df[eval_df['phone'].isin(valid_usage_phones)]
 
+    # 1. Date / Cohort Filter
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         today_d = date.today()
 
@@ -1974,6 +1957,27 @@ def render_dashboard(df_sales, prefix):
             if target_phones is not None and len(target_phones) > 0:
                 filtered = filtered[filtered['phone'].isin(target_phones)]
                 eval_df = eval_df[eval_df['phone'].isin(target_phones)]
+            
+    # 2. Search Filter
+    if search_q:
+        mask = (eval_df['Name'].astype(str).str.contains(search_q, case=False, na=False) |
+                eval_df['phone'].astype(str).str.contains(search_q, case=False, na=False))
+        m_phones = eval_df[mask]['phone'].unique()
+        filtered = filtered[filtered['phone'].isin(m_phones)]
+        eval_df = eval_df[eval_df['phone'].isin(m_phones)]
+        
+    # 3. Plan Name Filter
+    if plan_filt:
+        valid_plan_phones = eval_df[eval_df['plan name'].isin(plan_filt)]['phone'].unique()
+        filtered = filtered[filtered['phone'].isin(valid_plan_phones)]
+        eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
+        
+    # 4. Usage Health Filter (Strictly filter within current cohort/view)
+    if usage_filt:
+        latest_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')
+        valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
+        filtered = filtered[filtered['phone'].isin(valid_usage_phones) & filtered['Usage check'].isin(usage_filt)]
+        eval_df = eval_df[eval_df['phone'].isin(valid_usage_phones) & eval_df['Usage check'].isin(usage_filt)]
         
     unique_cx = eval_df['phone'].nunique()
     st.markdown(f"""
