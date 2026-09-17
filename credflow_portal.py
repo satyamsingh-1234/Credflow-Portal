@@ -2587,7 +2587,7 @@ def render_crm(cx_df):
         all_poa_opts = [""] + list(dict.fromkeys(default_poa_opts + existing_poa_db))
 
         # Static editor key tied only to batch and selection states to avoid destroying React grid on filter changes
-        editor_key = f"data_editor_v3_{select_top_10}_{select_all_wa}_{select_all_em}_{select_all_free_wa}_{max_rows_limit}"
+        editor_key = f"data_editor_v3_{select_top_50}_{select_top_100}_{select_all_wa}_{select_all_em}_{select_all_free_wa}_{max_rows_limit}"
         edited_df = st.data_editor(
             ui_display_df,
             key=editor_key,
