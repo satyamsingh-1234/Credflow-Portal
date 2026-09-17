@@ -1068,10 +1068,21 @@ def send_callback_support_email(cx_name, cx_phone, cx_email, plan_name, follow_u
     msg.add_alternative(html_content, subtype='html')
 
     try:
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        try:
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=25)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        except Exception:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=25)
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+
         server.send_message(msg)
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            pass
         return True, "Support Email Alert Sent"
     except Exception as ex:
         return False, str(ex)
@@ -1259,9 +1270,22 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
     EMAIL_ADDRESS = "support@credflow.in"
     EMAIL_PASSWORD = "slvyzkzxpsjaofxc"
 
+    def _connect_smtp():
+        # Try Port 587 (STARTTLS) first with timeout
+        try:
+            srv = smtplib.SMTP('smtp.gmail.com', 587, timeout=25)
+            srv.ehlo()
+            srv.starttls()
+            srv.ehlo()
+            srv.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            return srv
+        except Exception:
+            srv = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=25)
+            srv.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            return srv
+
     try:
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        server = _connect_smtp()
         
         successful_phones = []
         total_count = len(selected_rows_data)
@@ -1365,19 +1389,41 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
             msg.set_content("Please enable HTML to view this email.")
             msg.add_alternative(body, subtype='html')
             
-            try:
-                server.send_message(msg)
+            # Send message with auto-reconnect fallback if disconnected
+            sent_ok = False
+            last_err = None
+            for attempt in range(2):
+                try:
+                    server.send_message(msg)
+                    sent_ok = True
+                    break
+                except (smtplib.SMTPServerDisconnected, smtplib.SMTPConnectError, smtplib.SMTPException, OSError) as send_err:
+                    last_err = send_err
+                    try:
+                        try:
+                            server.quit()
+                        except Exception:
+                            pass
+                        server = _connect_smtp()
+                    except Exception:
+                        pass
+
+            if sent_ok:
                 successful_phones.append(phone_str)
                 success_count += 1
                 log_outreach_event("Email", health, name, phone_str, email_to, msg['Subject'], "SUCCESS")
-            except Exception as send_err:
+            else:
                 error_count += 1
-                log_outreach_event("Email", health, name, phone_str, email_to, msg['Subject'], "FAILED", str(send_err))
+                log_outreach_event("Email", health, name, phone_str, email_to, msg['Subject'], "FAILED", str(last_err or "Delivery failed"))
                 
             if progress_callback:
                 progress_callback(idx + 1, total_count, name, success_count, error_count)
             
-        server.quit()
+        try:
+            server.quit()
+        except Exception:
+            pass
+
         return True, successful_phones
     except Exception as e:
         return False, str(e)
