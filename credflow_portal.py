@@ -2325,11 +2325,11 @@ def render_crm(cx_df):
 
         btn1, btn2, btn3, btn4 = st.columns([3, 3, 3, 2])
         with btn1:
-            wa_clicked = st.button("🚀 Send via WA API", type="primary", use_container_width=True)
+            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", type="primary", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
         with btn2:
-            em_clicked = st.button("🚀 Send Emails", type="primary", use_container_width=True)
+            em_clicked = st.button("🚀 Send Emails (SMTP)", type="primary", use_container_width=True)
         with btn3:
-            free_wa_clicked = st.button("🚀 Send via Free WA", type="secondary", use_container_width=True)
+            free_wa_clicked = st.button("💬 Free WA (Web Links)", type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links without requiring wallet balance")
         with btn4:
             excel_crm = to_excel_download(edited_df, sheet_name="CRM Data")
             st.download_button("📥 Export CRM", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
@@ -2337,7 +2337,7 @@ def render_crm(cx_df):
         if wa_clicked:
             selected_wa_df = edited_df[edited_df['📩 Send API'] == True]
             if selected_wa_df.empty:
-                st.warning("Pehle table mein se left side par '📩 Send API' check box tick karein un users ke liye jinko message bhejna hai.")
+                st.warning("Pehle table mein se left side par '📩 Send API' check box tick karein un users ke liye jinko automatic WhatsApp bhejna hai.")
             else:
                 success_count = 0
                 error_count = 0
@@ -2359,7 +2359,7 @@ def render_crm(cx_df):
                         error_count += 1
                         log_outreach_event("WhatsApp API", row.get('Usage check', ''), name, row.get('phone', ''), row.get('email', ''), "Interakt WA Template", "FAILED", str(msg))
                         if msg == "WALLET_INSUFFICIENT_BALANCE":
-                            st.error("⚠️ **Interakt WA API Error: Insufficient Wallet Balance!** Kripya [app.interakt.ai](https://app.interakt.ai) par wallet recharge karein. Alternately, '💬 Send via Free WA' option use karein.")
+                            st.error("⚠️ **Interakt WA API Error: Insufficient Wallet Balance!** Kripya [app.interakt.ai](https://app.interakt.ai) par login karke wallet recharge karein taaki automatically background mein messages deliver ho sakein. Jab tak recharge nahi hota, aap '💬 Free WA (Web Links)' button use kar sakte hain.")
                             break
                     update_ui(idx + 1, total_wa, name, success_count, error_count)
                 
