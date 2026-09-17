@@ -3580,7 +3580,6 @@ with tab_upload:
                                 'file_name': uploaded_file.name
                             }
                             st.cache_data.clear()
-                            st.session_state['d_preset_select_dash_master'] = "Overall Data (All Cohorts Combined)"
                             st.rerun()
 
                         except Exception as e:
