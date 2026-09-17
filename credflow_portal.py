@@ -37,16 +37,19 @@ if PERSISTENT_DB != REPO_DB:
         except Exception:
             pass
     elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Sync sales_plan_history from clean_master_data.csv.gz if persistent DB has old bloated/duplicate batches or outdated BVP labels
+        # Initialize sales_plan_history from clean_master_data.csv.gz ONLY if database is completely empty
         try:
             p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
             cur = p_conn.cursor()
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM sales_plan_history WHERE [plan name] LIKE '%BVP%' AND ([CP Usage in last 7 days] LIKE '%100%' OR [CP Usage in last 7 days] = '>100')")
-            old_bvp_cnt = cur.fetchone()[0]
+
+            # In-place non-destructive update for outdated BVP labels (preserves user uploads)
+            p_conn.execute("UPDATE sales_plan_history SET [CP Usage in last 7 days] = '>1000' WHERE [plan name] LIKE '%BVP%' AND ([CP Usage in last 7 days] LIKE '%100%' OR [CP Usage in last 7 days] = '>100')")
+            p_conn.commit()
+
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-            if (p_cnt != 5465 or old_bvp_cnt > 0) and os.path.exists(csv_master):
+            if p_cnt == 0 and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
                 p_conn.commit()
@@ -1524,14 +1527,26 @@ def render_dashboard(df_sales, prefix):
     usage_opts = ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢", "No Data (Not Uploaded)"]
     
     # ── TOP DATE / COHORT DROPDOWN FILTER ──
+    batches_in_data = []
+    if 'Upload_Batch' in df_sales.columns:
+        for b in df_sales['Upload_Batch'].dropna().unique():
+            b_str = str(b).strip()
+            if b_str and b_str.lower() not in ['nan', 'none', 'july.csv', 'aug.csv', 'july_adoption_project', '08092026.csv']:
+                batches_in_data.append(b_str)
+
     dp_opts = [
         "Overall Data (All Cohorts Combined)",
         "July Cohort Data",
         "August Cohort Data",
+    ]
+    for b in batches_in_data:
+        dp_opts.append(f"📁 Batch: {b}")
+
+    dp_opts.extend([
         "Last 30 Days",
         "Last 90 Days",
         "Custom Date Range..."
-    ]
+    ])
 
     s_key = f"s_search_{prefix}"
     if s_key not in st.session_state:
@@ -1619,6 +1634,12 @@ def render_dashboard(df_sales, prefix):
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
+        elif date_preset.startswith("📁 Batch: "):
+            target_batch = date_preset.replace("📁 Batch: ", "").strip()
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = (eval_df['Upload_Batch'].astype(str) == target_batch)
+                filtered = filtered[batch_mask]
+                eval_df = eval_df[batch_mask]
         else:
             target_phones = None
             if "Last 30 Days" in date_preset:
@@ -3201,10 +3222,6 @@ else:
 is_admin = st.session_state.get('admin_unlocked', False)
 
 if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
-    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-    if os.path.exists(csv_master):
-        clean_df = pd.read_csv(csv_master)
-        clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
     st.cache_data.clear()
     st.rerun()
 
@@ -3223,9 +3240,9 @@ with tab_dash:
         import pandas as pd
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
         
-        # Check if database has old bloated rows
+        # Check if database is empty; only seed if 0 rows exist
         cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0] if not s_batches.empty else 0
-        if cur_row_cnt != 5465:
+        if cur_row_cnt == 0:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
@@ -3370,7 +3387,17 @@ with tab_upload:
                                             plan_start = p_dt.strftime('%d/%m/%Y')
                                     except:
                                         pass
+                                else:
+                                    plan_start = datetime.now().strftime('%d/%m/%Y')
+
                                 plan_end = _get_row_val(row, ['plan end date', 'end date'])
+                                if not plan_end:
+                                    try:
+                                        p_st = pd.to_datetime(plan_start, format='%d/%m/%Y', errors='coerce')
+                                        if pd.notna(p_st):
+                                            plan_end = (p_st + pd.DateOffset(years=1)).strftime('%d/%m/%Y')
+                                    except:
+                                        plan_end = ""
 
                                 # Skip row ONLY if name, phone, and plan_name are ALL missing
                                 if not cx_name and not raw_phone and not plan_name:
@@ -3546,14 +3573,47 @@ with tab_upload:
 
                             st.session_state['last_processed_file_id'] = file_id
                             st.session_state['current_upload_df'] = out_df
+                            st.session_state['upload_success_info'] = {
+                                'batch': batch_name,
+                                'rows': len(out_df),
+                                'unique_cx': out_df['phone'].nunique(),
+                                'file_name': uploaded_file.name
+                            }
                             st.cache_data.clear()
-                            st.success("Data Formatted and Saved to History!")
+                            st.session_state['d_preset_select_dash_master'] = "Overall Data (All Cohorts Combined)"
                             st.rerun()
 
                         except Exception as e:
                             st.error(f"Error reading file: {e}")
                             import traceback
                             st.code(traceback.format_exc())
+
+                    # Render live preview & confirmation immediately after rerun
+                    if 'upload_success_info' in st.session_state and st.session_state.get('last_processed_file_id') == file_id:
+                        info = st.session_state['upload_success_info']
+                        st.markdown(f"""
+                        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin: 16px 0;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 style="margin:0 0 6px 0; color:#166534; font-size:18px;">🎉 Data Successfully Uploaded & Active in Database!</h3>
+                                    <p style="margin:0; color:#15803D; font-size:14px;">
+                                        File: <b>{info.get('file_name')}</b> | Batch: <code>{info.get('batch')}</code><br>
+                                        Rows Added: <b>{info.get('rows')}</b> | Unique Customers: <b>{info.get('unique_cx')}</b>
+                                    </p>
+                                </div>
+                                <div style="background:#10B981; color:white; font-weight:700; padding:6px 16px; border-radius:20px; font-size:13px;">
+                                    LIVE IN SYSTEM ⚡
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        preview_df = st.session_state.get('current_upload_df')
+                        if preview_df is not None and not preview_df.empty:
+                            st.markdown("#### 📋 Uploaded Batch Data Preview (First 50 Rows)")
+                            cols_to_show = [c for c in ['Name', 'phone', 'email', 'plan name', 'feature', 'Usage check', 'CP Usage in last 7 days', 'Last Sync in 7 days', 'App login done in last 7 days', 'Plan Stat Date'] if c in preview_df.columns]
+                            st.dataframe(preview_df[cols_to_show].head(50), use_container_width=True)
+                            st.info("💡 **Aapka fresh data save ho chuka hai!** Ab aap **'📊 Main Dashboard & CRM'** tab par jaakar iska complete analysis aur CRM actions dekh sakte hain.")
 
             else:
                 import pandas as pd
@@ -3595,10 +3655,10 @@ with tab_upload:
 
                     st.markdown("---")
 
-                    extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July_Adoption_Project' in b or '08092026' in b)]
+                    extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July' in b or 'july' in b or 'Aug' in b or 'aug' in b or '08092026' in b)]
                     if extra_batches:
-                        with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July & 08092026 Only)"):
-                            st.write(f"The following intermediate batches will be safely removed, keeping **July_Adoption_Project** and **08092026.csv** intact:")
+                        with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July & August Baseline Only)"):
+                            st.write(f"The following intermediate batches will be safely removed, keeping **July** and **August** baseline datasets intact:")
                             for eb in extra_batches:
                                 st.caption(f"&bull; {eb}")
                             if st.button("🗑️ Delete All Intermediate Extra Batches Now", key="btn_cleanup_extra"):
