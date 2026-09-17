@@ -1242,8 +1242,8 @@ def get_green_api_creds():
     host = get_setting("green_api_host", "https://api.green-api.com").strip().rstrip('/')
     if not host:
         host = "https://api.green-api.com"
-    id_inst = get_setting("green_api_id_instance", "").strip()
-    token = get_setting("green_api_token_instance", "").strip()
+    id_inst = get_setting("green_api_id_instance", "710722739217").strip()
+    token = get_setting("green_api_token_instance", "2531af6471794e0a845b72348d7d24beab6f7b1ee7224c3887").strip()
     return host, id_inst, token
 
 def get_green_api_state():
