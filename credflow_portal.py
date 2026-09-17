@@ -1619,7 +1619,7 @@ def render_dashboard(df_sales, prefix):
         if "July" in date_preset and not date_preset.startswith("📁 Batch: "):
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = eval_df['Upload_Batch'].astype(str).apply(
-                    lambda b: ('july' in b.lower() and 'aug' not in b.lower()) or b in ['July.csv', 'July_Adoption_Project.csv']
+                    lambda b: b.strip().lower() in ['july.csv', 'july_adoption_project.csv', 'july']
                 )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 7)
@@ -1630,7 +1630,7 @@ def render_dashboard(df_sales, prefix):
         elif "August" in date_preset and not date_preset.startswith("📁 Batch: "):
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = eval_df['Upload_Batch'].astype(str).apply(
-                    lambda b: ('aug' in b.lower() and 'july' not in b.lower()) or b in ['08092026.csv', 'Aug.csv']
+                    lambda b: b.strip().lower() in ['aug.csv', '08092026.csv', 'aug']
                 )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
