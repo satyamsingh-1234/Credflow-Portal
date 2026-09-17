@@ -2649,7 +2649,6 @@ def render_crm(cx_df):
                 conn.commit()
                 if success_count > 0:
                     st.success(f"✅ Successfully sent {success_count} messages directly from your personal WhatsApp number!")
-                    import time
                     time.sleep(1)
                     st.rerun()
 
@@ -2685,7 +2684,6 @@ def render_crm(cx_df):
                 conn.commit()
                 if success_count > 0:
                     st.success(f"✅ Successfully sent {success_count} messages via Interakt and auto-saved their status!")
-                    import time
                     time.sleep(1)
                     st.rerun() # Refresh table to show ticks
 
@@ -2719,7 +2717,6 @@ def render_crm(cx_df):
                         st.success(f"✅ Successfully sent {len(successful_phones)} Emails and auto-saved their status!")
                         if len(successful_phones) < len(selected_rows_data):
                             st.warning(f"⚠️ Skipped {len(selected_rows_data) - len(successful_phones)} customers because their email address was invalid or missing.")
-                        import time
                         time.sleep(2)
                         st.rerun()
                     else:
@@ -3037,7 +3034,6 @@ def render_batch_comparison(conn):
                     conn.commit()
                     if success_count > 0:
                         st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
-                        import time
                         time.sleep(1)
                         st.rerun()
 
@@ -3073,7 +3069,6 @@ def render_batch_comparison(conn):
                     conn.commit()
                     if success_count > 0:
                         st.success(f"✅ WA API Sent to {success_count} customers!")
-                        import time
                         time.sleep(1)
                         st.rerun()
 
@@ -3095,7 +3090,6 @@ def render_batch_comparison(conn):
                                 conn.execute('INSERT INTO customer_interactions (phone, email_sent) VALUES (?, 1) ON CONFLICT(phone) DO UPDATE SET email_sent = 1', (p,))
                             conn.commit()
                             st.success(f"✅ Emails sent to: {len(successful_phones)} customers!")
-                            import time
                             time.sleep(2)
                             st.rerun()
                         else:
@@ -3225,7 +3219,6 @@ def render_batch_comparison(conn):
                     conn.commit()
                     if success_count > 0:
                         st.success(f"✅ Sent {success_count} messages from your personal WhatsApp!")
-                        import time
                         time.sleep(1)
                         st.rerun()
 
@@ -3261,7 +3254,6 @@ def render_batch_comparison(conn):
                     conn.commit()
                     if success_count > 0:
                         st.success(f"✅ WA API Sent to {success_count} customers!")
-                        import time
                         time.sleep(1)
                         st.rerun()
 
@@ -3283,7 +3275,6 @@ def render_batch_comparison(conn):
                                 conn.execute('INSERT INTO customer_interactions (phone, email_sent) VALUES (?, 1) ON CONFLICT(phone) DO UPDATE SET email_sent = 1', (p,))
                             conn.commit()
                             st.success(f"✅ Emails sent to: {len(successful_phones)} customers!")
-                            import time
                             time.sleep(2)
                             st.rerun()
                         else:
