@@ -1616,18 +1616,22 @@ def render_dashboard(df_sales, prefix):
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         today_d = date.today()
 
-        if "July" in date_preset:
+        if "July" in date_preset and not date_preset.startswith("📁 Batch: "):
             if 'Upload_Batch' in eval_df.columns:
-                batch_mask = eval_df['Upload_Batch'].astype(str).str.contains('July|july', case=False, na=False)
+                batch_mask = eval_df['Upload_Batch'].astype(str).apply(
+                    lambda b: ('july' in b.lower() and 'aug' not in b.lower()) or b in ['July.csv', 'July_Adoption_Project.csv']
+                )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 7)
             else:
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 7)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
-        elif "August" in date_preset:
+        elif "August" in date_preset and not date_preset.startswith("📁 Batch: "):
             if 'Upload_Batch' in eval_df.columns:
-                batch_mask = eval_df['Upload_Batch'].astype(str).str.contains('Aug|aug|usage|092026|112026', case=False, na=False)
+                batch_mask = eval_df['Upload_Batch'].astype(str).apply(
+                    lambda b: ('aug' in b.lower() and 'july' not in b.lower()) or b in ['08092026.csv', 'Aug.csv']
+                )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             else:
