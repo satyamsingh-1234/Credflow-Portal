@@ -980,7 +980,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 30:
             return "B/W 30 to 100", 2
         elif c_val > 0:
-            return "less than 30", 1
+            return "less than 30", 0
         else:
             return "None", 0
     elif tier == 'PRO':
@@ -989,7 +989,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 200:
             return "B/W 200 to 500", 2
         elif c_val > 0:
-            return "less than 200", 1
+            return "less than 200", 0
         else:
             return "None", 0
     else: # ENTERPRISE / PREMIUM / BVP
@@ -998,7 +998,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 500:
             return "B/W 500 to 1000", 2
         elif c_val > 0:
-            return "less than 500", 1
+            return "less than 500", 0
         else:
             return "None", 0
 
@@ -1132,23 +1132,24 @@ def find_usage_columns(df):
 
 
 def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0):
-    """Computes accurate Usage Health score using matrix rules and active activity guarantees"""
+    """Computes Usage Health score strictly following the original Points Matrix"""
     sync_yes = (sync_7d == "Yes")
     login_yes = (login_7d == "Yes")
     
     pn_upper = str(plan_name).upper()
     is_lite = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
     
-    # Rule 1: Lite Plan Exemption: Login=Yes and Sync=Yes -> ALWAYS Proper Usage 🟢
+    # Override Rule 1 (Lite Plan Exemption): For Lite/Basic plans, Login=Yes AND Sync=Yes -> ALWAYS Proper Usage 🟢
     if is_lite and login_yes and sync_yes:
         return "Proper Usage 🟢"
         
     _, cp_score = eval_plan_credits_and_score(plan_name, c_val)
     
-    # Rule 2: Zero Activity: 0 credits, no login, no sync, 0 contacts -> ALWAYS No Usage 🔴
-    if c_val == 0 and not login_yes and not sync_yes and contact_val == 0:
-        return "No Usage 🔴"
-        
+    # 3-Parameter Active Points Matrix:
+    # 1. App Login: Yes = +2 Pts, No = 0 Pts
+    # 2. Last Sync: Yes = +1 Pt, No = 0 Pts
+    # 3. CP Usage: Lite (>100: +3, 30-100: +2, <30: 0), Pro (>500: +3, 200-500: +2, <200: 0), Enterprise (>1000: +3, 500-1000: +2, <500: 0)
+    # 4. Contacts (if present): >30: +2 Pts, 11-30: +1 Pt
     pts = 0
     if login_yes: pts += 2
     if sync_yes: pts += 1
@@ -1156,10 +1157,10 @@ def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0):
     if contact_val > 30: pts += 2
     elif contact_val >= 11: pts += 1
     
-    # Rule 3: Active Sync + Substantial CP Usage -> Proper Usage 🟢
-    if sync_yes and (cp_score >= 2 or c_val >= 100):
-        return "Proper Usage 🟢"
-        
+    # Classification Rules (Strict Original Matrix):
+    # - Proper Usage 🟢: Score >= 4
+    # - Low Usage 🟡: Score = 1 to 3
+    # - No Usage 🔴: Score = 0
     if pts >= 4:
         return "Proper Usage 🟢"
     elif pts >= 1:
