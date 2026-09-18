@@ -980,7 +980,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 30:
             return "B/W 30 to 100", 2
         elif c_val > 0:
-            return "less than 30", 0
+            return "less than 30", 1
         else:
             return "None", 0
     elif tier == 'PRO':
@@ -989,7 +989,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 200:
             return "B/W 200 to 500", 2
         elif c_val > 0:
-            return "less than 200", 0
+            return "less than 200", 1
         else:
             return "None", 0
     else: # ENTERPRISE / PREMIUM / BVP
@@ -998,7 +998,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 500:
             return "B/W 500 to 1000", 2
         elif c_val > 0:
-            return "less than 500", 0
+            return "less than 500", 1
         else:
             return "None", 0
 
@@ -1889,7 +1889,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260918_accurate_usage_health_v1"):
+def prepare_eval_df(df_sales, cache_key="v20260918_dashboard_rule_v2"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
