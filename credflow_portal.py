@@ -1957,7 +1957,16 @@ def prepare_eval_df(df_sales, cache_key="v20260918_dashboard_rule_v2"):
         eval_df['parsed_plan_dt'] = pd.NaT
     
     def _calc_row_eff_dt(row):
-        p_dt = row['parsed_plan_dt']
+        u_dt = row.get('Upload_Date', '')
+        if pd.notna(u_dt) and str(u_dt).strip() and str(u_dt).strip().lower() not in ['nan', 'none', '']:
+            try:
+                p_dt = pd.to_datetime(u_dt, errors='coerce', dayfirst=True)
+                if pd.notna(p_dt):
+                    return p_dt.date()
+            except Exception:
+                pass
+
+        p_dt = row.get('parsed_plan_dt')
         if pd.notna(p_dt):
             return p_dt.date()
         batch = str(row.get('Upload_Batch', ''))
@@ -1980,10 +1989,10 @@ def prepare_eval_df(df_sales, cache_key="v20260918_dashboard_rule_v2"):
             return date(2026, 9, 15)
         elif 'Oct' in batch or 'oct' in batch or '102026' in batch:
             return date(2026, 10, 15)
-        return date(2026, 9, 15)
+        return date.today()
 
     eval_df['row_eff_dt'] = eval_df.apply(_calc_row_eff_dt, axis=1)
-    cust_dt_map = eval_df.groupby('phone')['row_eff_dt'].min().to_dict()
+    cust_dt_map = eval_df.groupby('phone')['row_eff_dt'].max().to_dict()
     eval_df['effective_date'] = eval_df['phone'].map(cust_dt_map)
     filtered['effective_date'] = eval_df['effective_date']
     return filtered, eval_df
@@ -1995,6 +2004,41 @@ def render_dashboard(df_sales, prefix):
     
     # Use the cached dataframe prep
     filtered_base, eval_df_base = prepare_eval_df(df_sales)
+
+    # Fetch active master file details
+    latest_file_name = None
+    latest_update_time = None
+    try:
+        cur_set = conn.execute("SELECT key, value FROM app_settings WHERE key IN ('last_uploaded_file', 'last_upload_time')").fetchall()
+        settings_dict = dict(cur_set)
+        latest_file_name = settings_dict.get('last_uploaded_file')
+        latest_update_time = settings_dict.get('last_upload_time')
+    except Exception:
+        pass
+
+    if not latest_file_name and 'Upload_Batch' in df_sales.columns:
+        recent_batches = [b for b in df_sales['Upload_Batch'].dropna().unique() if str(b).strip() not in ['July.csv', 'Aug.csv', 'nan', 'none', '']]
+        if recent_batches:
+            latest_file_name = str(recent_batches[-1])
+
+    if latest_file_name:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #F0FDF4 0%, #EFF6FF 100%); border: 1.5px solid #86EFAC; border-radius: 12px; padding: 14px 20px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+                <div style="font-size: 16px; font-weight: 700; color: #166534; display: flex; align-items: center; gap: 8px;">
+                    <span>📁</span> Active Master File: <span style="color: #0F172A; background: #FFFFFF; border: 1px solid #CBD5E1; padding: 3px 12px; border-radius: 6px; font-family: monospace; font-size: 14px;">{latest_file_name}</span>
+                </div>
+                <div style="font-size: 13px; color: #475569; margin-top: 4px;">
+                    📅 <b>Latest Live Update:</b> {latest_update_time or 'Today'} &bull; ⚡ Real-time Telecalling & Usage Health Active
+                </div>
+            </div>
+            <div>
+                <span style="background: #10B981; color: white; font-weight: 700; font-size: 12px; padding: 6px 16px; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                    LIVE DATA ACTIVE 🟢
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     temp_plans = df_sales['plan name'].replace("", pd.NA).ffill()
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
@@ -2009,11 +2053,16 @@ def render_dashboard(df_sales, prefix):
 
     dp_opts = [
         "Overall Data (All Cohorts Combined)",
+    ]
+    if latest_file_name:
+        dp_opts.append(f"📁 Today / Latest: {latest_file_name}")
+    dp_opts.extend([
         "July Cohort Data",
         "August Cohort Data",
-    ]
+    ])
     for b in batches_in_data:
-        dp_opts.append(f"📁 Batch: {b}")
+        if b != latest_file_name:
+            dp_opts.append(f"📁 Batch: {b}")
 
     dp_opts.extend([
         "Last 30 Days",
@@ -2094,6 +2143,12 @@ def render_dashboard(df_sales, prefix):
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
+        elif date_preset.startswith("📁 Today / Latest: "):
+            target_batch = date_preset.replace("📁 Today / Latest: ", "").strip()
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = (eval_df['Upload_Batch'].astype(str) == target_batch)
+                filtered = filtered[batch_mask]
+                eval_df = eval_df[batch_mask]
         elif date_preset.startswith("📁 Batch: "):
             target_batch = date_preset.replace("📁 Batch: ", "").strip()
             if 'Upload_Batch' in eval_df.columns:
@@ -4137,37 +4192,48 @@ with tab_upload:
                             out_df = pd.DataFrame(formatted_rows)
 
                             if not out_df.empty:
-                                batch_name = uploaded_file.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
-                                out_df['Upload_Batch'] = batch_name
+                                clean_batch_name = str(uploaded_file.name).strip()
+                                today_dt_str = datetime.now().strftime('%d/%m/%Y')
+                                out_df['Upload_Batch'] = clean_batch_name
+                                out_df['Upload_Date'] = today_dt_str
                                 out_df = out_df.astype(str)
 
-                                # ── UPDATE EXISTING CUSTOMER USAGE LIVE ACROSS HISTORICAL RECORDS ──
-                                # If customer exists in July/August/older batches, update their current health, sync & credits
-                                for p, p_group in out_df.groupby('phone'):
-                                    latest_row = p_group.iloc[0]
-                                    conn.execute('''
-                                        UPDATE sales_plan_history
-                                        SET [Last Sync in 7 days] = ?,
-                                            [CP Usage in last 7 days] = ?,
-                                            [App login done in last 7 days] = ?,
-                                            [Contact details fetched in last 7 days] = ?,
-                                            [raw_credits] = ?,
-                                            [Usage check] = ?
-                                        WHERE phone = ?
-                                    ''', (
-                                        str(latest_row['Last Sync in 7 days']),
-                                        str(latest_row['CP Usage in last 7 days']),
-                                        str(latest_row['App login done in last 7 days']),
-                                        str(latest_row['Contact details fetched in last 7 days']),
-                                        str(latest_row['raw_credits']),
-                                        str(latest_row['Usage check']),
-                                        str(p)
-                                    ))
-                                conn.commit()
+                                # Ensure Upload_Date column exists in DB table
+                                try:
+                                    conn.execute("ALTER TABLE sales_plan_history ADD COLUMN Upload_Date TEXT")
+                                    conn.commit()
+                                except Exception:
+                                    pass
 
-                                # Append fresh batch records
+                                # ── DEDUPLICATED LIVE UPSERT (NO DOUBLE ROWS) ──
+                                # 1. Extract phone numbers from newly uploaded data
+                                phones_in_upload = [str(p).replace('.0', '').strip() for p in out_df['phone'].unique() if str(p).strip()]
+
+                                # 2. Cleanly remove past rows for THESE uploaded customers so their rows do NOT duplicate
+                                if phones_in_upload:
+                                    conn.executemany("DELETE FROM sales_plan_history WHERE phone = ?", [(p,) for p in phones_in_upload])
+                                    conn.commit()
+
+                                # 3. Insert fresh customer records with updated batch name & today's date
                                 out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
                                 conn.commit()
+
+                                # 4. Save metadata so app and dashboard always know the latest active file and upload time
+                                try:
+                                    conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
+                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (clean_batch_name,))
+                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (datetime.now().strftime('%d %b %Y, %I:%M %p'),))
+                                    conn.commit()
+                                except Exception:
+                                    pass
+
+                                # 5. Persist to clean_master_data.csv.gz so Streamlit Cloud git redeploys retain the updated master data!
+                                try:
+                                    all_updated = pd.read_sql("SELECT * FROM sales_plan_history", conn)
+                                    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+                                    all_updated.to_csv(csv_master, index=False, compression='gzip')
+                                except Exception:
+                                    pass
                             else:
                                 st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
                                 st.stop()
@@ -4218,10 +4284,11 @@ with tab_upload:
                             st.session_state['last_processed_file_id'] = file_id
                             st.session_state['current_upload_df'] = out_df
                             st.session_state['upload_success_info'] = {
-                                'batch': batch_name,
+                                'batch': clean_batch_name,
                                 'rows': len(out_df),
                                 'unique_cx': out_df['phone'].nunique(),
-                                'file_name': uploaded_file.name
+                                'file_name': clean_batch_name,
+                                'upload_time': datetime.now().strftime('%d %b %Y, %I:%M %p')
                             }
                             st.cache_data.clear()
                             st.rerun()
@@ -4235,13 +4302,13 @@ with tab_upload:
                     if 'upload_success_info' in st.session_state and st.session_state.get('last_processed_file_id') == file_id:
                         info = st.session_state['upload_success_info']
                         st.markdown(f"""
-                        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin: 16px 0;">
+                        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin-margin: 16px 0;">
                             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                                 <div>
                                     <h3 style="margin:0 0 6px 0; color:#166534; font-size:18px;">🎉 Data Successfully Uploaded & Active in Database!</h3>
                                     <p style="margin:0; color:#15803D; font-size:14px;">
-                                        File: <b>{info.get('file_name')}</b> | Batch: <code>{info.get('batch')}</code><br>
-                                        Rows Added: <b>{info.get('rows')}</b> | Unique Customers: <b>{info.get('unique_cx')}</b>
+                                        📁 Active File: <b>{info.get('file_name')}</b> | 📅 Uploaded: <b>{info.get('upload_time')}</b><br>
+                                        👥 Active Customers: <b>{info.get('unique_cx')}</b> | Clean Rows Saved: <b>{info.get('rows')}</b> (Deduplicated)
                                     </p>
                                 </div>
                                 <div style="background:#10B981; color:white; font-weight:700; padding:6px 16px; border-radius:20px; font-size:13px;">
@@ -4257,6 +4324,20 @@ with tab_upload:
                             cols_to_show = [c for c in ['Name', 'phone', 'email', 'plan name', 'feature', 'Usage check', 'CP Usage in last 7 days', 'Last Sync in 7 days', 'App login done in last 7 days', 'Plan Stat Date'] if c in preview_df.columns]
                             st.dataframe(preview_df[cols_to_show].head(50), use_container_width=True)
                             st.info("💡 **Aapka fresh data save ho chuka hai!** Ab aap **'📊 Main Dashboard & CRM'** tab par jaakar iska complete analysis aur CRM actions dekh sakte hain.")
+
+                st.markdown("---")
+                s_active_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
+                if not s_active_batches.empty:
+                    st.markdown("#### 📋 Currently Active Files & Batches in Database")
+                    batch_summary = []
+                    for b in s_active_batches['Upload_Batch'].dropna().tolist():
+                        cnt_row = conn.execute("SELECT COUNT(*), COUNT(DISTINCT phone) FROM sales_plan_history WHERE Upload_Batch = ?", (b,)).fetchone()
+                        batch_summary.append({
+                            "📁 Active File / Batch Name": b,
+                            "Total Rows": cnt_row[0],
+                            "Unique Customers": cnt_row[1]
+                        })
+                    st.dataframe(pd.DataFrame(batch_summary), use_container_width=True, hide_index=True)
 
             else:
                 import pandas as pd
