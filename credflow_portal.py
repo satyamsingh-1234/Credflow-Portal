@@ -980,7 +980,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 30:
             return "B/W 30 to 100", 2
         elif c_val > 0:
-            return "less than 30", 0
+            return "less than 30", 1
         else:
             return "None", 0
     elif tier == 'PRO':
@@ -989,7 +989,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 200:
             return "B/W 200 to 500", 2
         elif c_val > 0:
-            return "less than 200", 0
+            return "less than 200", 1
         else:
             return "None", 0
     else: # ENTERPRISE / PREMIUM / BVP
@@ -998,9 +998,174 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 500:
             return "B/W 500 to 1000", 2
         elif c_val > 0:
-            return "less than 500", 0
+            return "less than 500", 1
         else:
             return "None", 0
+
+
+def parse_sync_status(val):
+    """Accurately parses sync status from raw sheets (handles dates, text statuses, booleans)"""
+    if pd.isna(val):
+        return "No"
+    s = str(val).strip()
+    s_lower = s.lower()
+    if not s or s_lower in ['nan', 'none', 'null', 'nil', '', '-', 'n/a', 'no', 'false', '0', 'off']:
+        return "No"
+    if any(k in s_lower for k in ['more than', 'more', 'not sync', 'never', 'disconnect', 'inactive', 'stopped', 'failed']):
+        return "No"
+    if any(k in s_lower for k in ['within', 'syncing', 'synced', 'yes', 'true', '1', 'connected', 'active', 'running', 'live', 'ok', 'success']):
+        return "Yes"
+    try:
+        dt = pd.to_datetime(s, errors='coerce', dayfirst=True)
+        if pd.notna(dt):
+            diff = (datetime.now() - dt.to_pydatetime()).days
+            return "Yes" if 0 <= diff <= 15 else "No"
+    except Exception:
+        pass
+    return "No"
+
+
+def parse_credits_num(val):
+    """Accurately parses credits/CP usage as float from messy formats (Indian commas, currency, text)"""
+    if pd.isna(val):
+        return 0.0
+    s = str(val).strip()
+    if not s or s.lower() in ['nan', 'none', 'null', 'nil', '', '-', 'n/a']:
+        return 0.0
+    cleaned = re.sub(r'[^\d.]', '', s)
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except Exception:
+        return 0.0
+
+
+def parse_login_status(val):
+    """Accurately parses app login status"""
+    if pd.isna(val):
+        return "No"
+    s = str(val).strip().lower()
+    if s in ['yes', 'true', '1', 'y', 'yess', 'logged in', 'active']:
+        return "Yes"
+    return "No"
+
+
+def find_usage_columns(df):
+    """Smartly identifies Sync, Credits/CP Usage, Login, and Contacts columns regardless of exact naming"""
+    cols = list(df.columns)
+    cols_lower = {c: str(c).strip().lower() for c in cols}
+    
+    # 1. Sync Column Detection
+    col_sync = None
+    for c, cl in cols_lower.items():
+        if any(k in cl for k in ['last sync', 'syncing status', 'sync status', 'syncing_status', 'sync_status', 'last_sync']):
+            col_sync = c
+            break
+    if not col_sync:
+        for c, cl in cols_lower.items():
+            if 'sync' in cl and not any(ex in cl for ex in ['backup', 'feat', 'addon', 'plan', 'price']):
+                col_sync = c
+                break
+    if not col_sync:
+        for c, cl in cols_lower.items():
+            if 'tally' in cl and any(k in cl for k in ['status', 'connected', 'connect', 'state', 'active']):
+                col_sync = c
+                break
+    if not col_sync:
+        for c in cols:
+            vals = [str(v).strip().lower() for v in df[c].dropna().head(20)]
+            if any('sync' in v or 'within' in v for v in vals):
+                col_sync = c
+                break
+
+    # 2. Credits / CP Usage Column Detection
+    col_credits = None
+    for c, cl in cols_lower.items():
+        if any(k in cl for k in ['cp usage', 'cp_usage', 'credits used', 'credits_used', 'credit used', 'credit_used', 'raw_credits']):
+            col_credits = c
+            break
+    if not col_credits:
+        for c, cl in cols_lower.items():
+            if any(k in cl for k in ['cp point', 'credit point', 'total usage', 'usage in', 'cp point', 'cp_point']):
+                col_credits = c
+                break
+    if not col_credits:
+        for c, cl in cols_lower.items():
+            if any(k in cl for k in ['credit', 'usage', 'consumption']) and not any(ex in cl for ex in ['base', 'extra', 'limit', 'price', 'plan', 'card', 'id']):
+                col_credits = c
+                break
+    if not col_credits:
+        for c in cols:
+            if c == col_sync: continue
+            vals = df[c].dropna().astype(str).str.replace(',', '', regex=False).str.strip().head(20)
+            numeric_cnt = sum(1 for v in vals if re.match(r'^\d+(\.\d+)?$', v) and float(v) > 0)
+            if numeric_cnt >= 3 and any(k in c.lower() for k in ['unnamed', 'col', 'val', 'point', 'usage', 'cr']):
+                col_credits = c
+                break
+
+    # 3. Login Column Detection
+    col_login = None
+    for c, cl in cols_lower.items():
+        if any(k in cl for k in ['app login', 'app_login', 'last login', 'last_login', 'login status']):
+            col_login = c
+            break
+    if not col_login:
+        for c, cl in cols_lower.items():
+            if 'login' in cl and not any(ex in cl for ex in ['plan', 'price', 'id', 'url']):
+                col_login = c
+                break
+    if not col_login:
+        for c in cols:
+            if c in [col_sync, col_credits]: continue
+            vals = [str(v).strip().lower() for v in df[c].dropna().head(15)]
+            if vals and all(v in ['yes', 'no', 'yess', 'true', 'false', '0', '1'] for v in vals):
+                col_login = c
+                break
+
+    # 4. Contacts Column Detection
+    col_contacts = None
+    for c, cl in cols_lower.items():
+        if 'contact' in cl and any(k in cl for k in ['fetch', 'detail', 'count']):
+            col_contacts = c
+            break
+            
+    return col_sync, col_credits, col_login, col_contacts
+
+
+def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0):
+    """Computes accurate Usage Health score using matrix rules and active activity guarantees"""
+    sync_yes = (sync_7d == "Yes")
+    login_yes = (login_7d == "Yes")
+    
+    pn_upper = str(plan_name).upper()
+    is_lite = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
+    
+    # Rule 1: Lite Plan Exemption: Login=Yes and Sync=Yes -> ALWAYS Proper Usage 🟢
+    if is_lite and login_yes and sync_yes:
+        return "Proper Usage 🟢"
+        
+    _, cp_score = eval_plan_credits_and_score(plan_name, c_val)
+    
+    # Rule 2: Zero Activity: 0 credits, no login, no sync, 0 contacts -> ALWAYS No Usage 🔴
+    if c_val == 0 and not login_yes and not sync_yes and contact_val == 0:
+        return "No Usage 🔴"
+        
+    pts = 0
+    if login_yes: pts += 2
+    if sync_yes: pts += 1
+    pts += cp_score
+    if contact_val > 30: pts += 2
+    elif contact_val >= 11: pts += 1
+    
+    # Rule 3: Active Sync + Substantial CP Usage -> Proper Usage 🟢
+    if sync_yes and (cp_score >= 2 or c_val >= 100):
+        return "Proper Usage 🟢"
+        
+    if pts >= 4:
+        return "Proper Usage 🟢"
+    elif pts >= 1:
+        return "Low Usage 🟡"
+    else:
+        return "No Usage 🔴"
 
 def extract_clean_features_from_row(r):
     all_f = str(r.get('All Features', '')).strip()
@@ -1723,7 +1888,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260916_bvp_force_v4"):
+def prepare_eval_df(df_sales, cache_key="v20260918_accurate_usage_health_v1"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1744,63 +1909,28 @@ def prepare_eval_df(df_sales, cache_key="v20260916_bvp_force_v4"):
                 filtered[col] = eval_df[col]
             
     def _validate_row_usage_health(row):
-        c_raw = str(row.get('raw_credits', row.get('CP Usage in last 7 days', '0'))).replace(',', '').strip()
-        try:
-            c_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
-        except:
-            c_val = 0
-
-        l_raw = str(row.get('App login done in last 7 days', '')).strip().lower()
-        login_yes = (l_raw != '' and l_raw != 'nan' and l_raw not in ['no', 'false', '0', 'none'])
-
-        s_raw = str(row.get('Last Sync in 7 days', '')).strip().lower()
-        sync_yes = bool(s_raw and 'more' not in s_raw and s_raw not in ['no', 'false', '0', 'nan', 'none', ''])
-
-        ct_raw = str(row.get('Contact details fetched in last 7 days', '0')).replace(',', '').strip()
-        try:
-            ct_val = float(ct_raw) if ct_raw and ct_raw.lower() != 'nan' else 0
-        except:
-            ct_val = 0
-
-        # ZERO ACTIVITY RULE: If credits = 0, no login, no sync, 0 contacts -> ALWAYS No Usage 🔴
-        if c_val == 0 and not login_yes and not sync_yes and ct_val == 0:
-            return 'No Usage 🔴'
-
-        # Special Rule: Lite Plan with Login=Yes AND Sync=Yes -> Always Proper Usage 🟢
-        pn_upper = str(row.get('plan name', '')).upper()
-        is_lite_plan = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
-        if is_lite_plan and login_yes and sync_yes:
-            return 'Proper Usage 🟢'
-
-        pts = 0
+        c_val = parse_credits_num(row.get('raw_credits', row.get('CP Usage in last 7 days', 0)))
+        s_val = parse_sync_status(row.get('Last Sync in 7 days', ''))
+        l_val = parse_login_status(row.get('App login done in last 7 days', ''))
+        ct_val = parse_credits_num(row.get('Contact details fetched in last 7 days', 0))
         plan_n = str(row.get('plan name', ''))
-        _, cp_score = eval_plan_credits_and_score(plan_n, c_val)
-        pts += cp_score
-
-        if login_yes: pts += 2
-        if sync_yes: pts += 1
-        if ct_val > 30: pts += 2
-        elif ct_val >= 11: pts += 1
-
-        if pts == 0: return 'No Usage 🔴'
-        elif pts <= 3: return 'Low Usage 🟡'
-        else: return 'Proper Usage 🟢'
+        return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
 
     eval_df['Usage check'] = eval_df.apply(_validate_row_usage_health, axis=1)
     filtered['Usage check'] = eval_df['Usage check']
 
     def _eval_row_cp_label(row):
         pn = str(row.get('plan name', ''))
-        c_raw = str(row.get('raw_credits', row.get('CP Usage in last 7 days', '0'))).replace(',', '').strip()
-        try:
-            c_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
-        except:
-            c_val = 0
+        c_val = parse_credits_num(row.get('raw_credits', row.get('CP Usage in last 7 days', 0)))
         lbl, _ = eval_plan_credits_and_score(pn, c_val)
-        return lbl if lbl != "None" else pd.NA
+        return lbl if (lbl and lbl != "None") else "None"
 
     eval_df['CP Usage in last 7 days'] = eval_df.apply(_eval_row_cp_label, axis=1)
     filtered['CP Usage in last 7 days'] = eval_df['CP Usage in last 7 days']
+
+    # Standardize Last Sync in 7 days display column to Clean Yes / No
+    eval_df['Last Sync in 7 days'] = eval_df['Last Sync in 7 days'].apply(parse_sync_status)
+    filtered['Last Sync in 7 days'] = eval_df['Last Sync in 7 days']
 
     if 'phone' in eval_df.columns and 'Usage check' in eval_df.columns:
         if 'Upload_Batch' in eval_df.columns:
@@ -3889,14 +4019,11 @@ with tab_upload:
 
                             s_df = _load_raw_file(uploaded_file)
 
-                            # Recover missing headers from the raw CSV dump
+                            # Recover missing headers from the raw CSV dump if present
                             if 'Unnamed: 33' in s_df.columns: s_df.rename(columns={'Unnamed: 33': 'syncing_status'}, inplace=True)
                             if 'Unnamed: 34' in s_df.columns: s_df.rename(columns={'Unnamed: 34': 'customer_id'}, inplace=True)
                             if 'Unnamed: 35' in s_df.columns: s_df.rename(columns={'Unnamed: 35': 'Last Login'}, inplace=True)
                             if 'Unnamed: 36' in s_df.columns: s_df.rename(columns={'Unnamed: 36': 'Credits used'}, inplace=True)
-
-                            # Remove remaining Unnamed columns
-                            s_df = s_df.loc[:, ~s_df.columns.str.contains('^Unnamed')]
                             def _get_row_val(r_item, keywords, default=""):
                                 for col in r_item.index:
                                     col_str = str(col).lower().replace('_', ' ').strip()
@@ -3912,27 +4039,8 @@ with tab_upload:
                             formatted_rows = []
                             s_no = 1
 
-                            # Dynamic column finding for Usage Data with smart fallback
-                            col_credits = next((c for c in s_df.columns if 'credit' in c.lower() or 'cp usage' in c.lower() or 'cp_usage' in c.lower()), None)
-                            col_login = next((c for c in s_df.columns if 'login' in c.lower() or 'app_login' in c.lower()), None)
-                            col_sync = next((c for c in s_df.columns if 'sync' in c.lower()), None)
-                            col_contacts = next((c for c in s_df.columns if 'contact' in c.lower() and 'fetch' in c.lower()), None)
-
-                            # Smart value-based fallback if columns are unnamed (e.g. Unnamed: 33, Unnamed: 38, Unnamed: 7)
-                            if not col_sync:
-                                for c in s_df.columns:
-                                    vals = s_df[c].dropna().astype(str).str.lower().head(10).tolist()
-                                    if any('sync' in v for v in vals):
-                                        col_sync = c
-                                        break
-
-                            if not col_login:
-                                for c in s_df.columns:
-                                    if c == col_sync: continue
-                                    vals = [v.strip().lower() for v in s_df[c].dropna().astype(str).head(10)]
-                                    if vals and all(v in ['yes', 'no', 'yess', 'true', 'false', '0', '1'] for v in vals):
-                                        col_login = c
-                                        break
+                            # Smart dynamic column discovery for Usage Data
+                            col_sync, col_credits, col_login, col_contacts = find_usage_columns(s_df)
 
                             for _, row in s_df.iterrows():
                                 cx_name = _get_row_val(row, ['first name', 'customer_name', 'name', 'customer'])
@@ -3979,81 +4087,24 @@ with tab_upload:
                                 if not features:
                                     features = [plan_name]
 
-                                health_status = str(row.get('Usage check', "No Data (Not Uploaded)"))
-                                login_7d = "No"
-                                cp_7d = "No"
-                                sync_7d = ""
+                                # ── ACCURATE USAGE EXTRACTION & EVALUATION ──
+                                c_val = parse_credits_num(row[col_credits]) if col_credits else 0.0
+                                cp_7d, _ = eval_plan_credits_and_score(plan_name, c_val)
 
-                                c_val = 0
-                                cp_7d = "None"
-                                login_7d = "None"
-                                sync_7d = "None"
-                                contact_7d = "None"
+                                login_7d = parse_login_status(row[col_login]) if col_login else "No"
+                                sync_7d = parse_sync_status(row[col_sync]) if col_sync else "No"
 
-                                # ── USAGE HEALTH EVALUATION LOGIC (POINTS SYSTEM) ──
-                                if col_credits or col_login or col_sync or col_contacts:
-                                    cp_score = 0
-                                    # ── 1. CP Usage / Credits (Plan-Wise Dynamic) ──
-                                    if col_credits:
-                                        c_used = str(row[col_credits]).replace(',', '').strip()
-                                        try:
-                                            c_val = float(c_used) if c_used and c_used.lower() != 'nan' else 0
-                                        except:
-                                            c_val = 0
+                                contact_val = parse_credits_num(row[col_contacts]) if col_contacts else 0.0
+                                if contact_val > 30:
+                                    contact_7d = "More than 31"
+                                elif contact_val >= 11:
+                                    contact_7d = "11 to 30"
+                                elif contact_val > 0:
+                                    contact_7d = "0 to 10"
+                                else:
+                                    contact_7d = "None"
 
-                                        cp_7d, cp_score = eval_plan_credits_and_score(plan_name, c_val)
-
-                                    # ── 2. App Login ──
-                                    if col_login:
-                                        l_login = str(row[col_login]).strip()
-                                        if l_login and l_login.lower() not in ['nan', 'none', 'no', 'false', '0', '']:
-                                            login_7d = "Yes"
-                                        else:
-                                            login_7d = "No"
-
-                                    # ── 3. Last Sync ──
-                                    if col_sync:
-                                        s_status = str(row[col_sync]).strip().lower()
-                                        if 'more' in s_status or s_status in ['no', 'false', '0']:
-                                            sync_7d = "No"
-                                        elif s_status and s_status != 'nan':
-                                            sync_7d = "Yes"
-
-                                    # ── 4. Contact Details Fetched ──
-                                    contact_val = 0
-                                    if col_contacts:
-                                        c_raw = str(row[col_contacts]).replace(',', '').strip()
-                                        try:
-                                            contact_val = float(c_raw) if c_raw and c_raw.lower() != 'nan' else 0
-                                        except:
-                                            contact_val = 0
-
-                                    if contact_val > 30:
-                                        contact_7d = "More than 31"
-                                    elif contact_val >= 11:
-                                        contact_7d = "11 to 30"
-                                    elif contact_val > 0:
-                                        contact_7d = "0 to 10"
-                                    else:
-                                        contact_7d = "None"
-
-                                    h_score = 0
-                                    if login_7d == "Yes": h_score += 2
-                                    if sync_7d == "Yes": h_score += 1
-                                    h_score += cp_score
-                                    if contact_val > 30: h_score += 2
-                                    elif contact_val >= 11: h_score += 1
-
-                                    pn_upper = str(plan_name).upper()
-                                    is_lite_plan = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
-
-                                    if is_lite_plan and login_7d == "Yes" and sync_7d == "Yes":
-                                        health_status = "Proper Usage 🟢"
-                                    else:
-                                        # Rule 2: Exactly as before (4-parameter Points Matrix System)
-                                        if h_score == 0: health_status = "No Usage 🔴"
-                                        elif h_score <= 3: health_status = "Low Usage 🟡"
-                                        else: health_status = "Proper Usage 🟢"
+                                health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val)
 
                                 row['Credits used'] = c_val
 
@@ -4081,11 +4132,35 @@ with tab_upload:
                             out_df = pd.DataFrame(formatted_rows)
 
                             if not out_df.empty:
-                                # Ensure output columns match sqlite schema
                                 batch_name = uploaded_file.name + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")
                                 out_df['Upload_Batch'] = batch_name
-
                                 out_df = out_df.astype(str)
+
+                                # ── UPDATE EXISTING CUSTOMER USAGE LIVE ACROSS HISTORICAL RECORDS ──
+                                # If customer exists in July/August/older batches, update their current health, sync & credits
+                                for p, p_group in out_df.groupby('phone'):
+                                    latest_row = p_group.iloc[0]
+                                    conn.execute('''
+                                        UPDATE sales_plan_history
+                                        SET [Last Sync in 7 days] = ?,
+                                            [CP Usage in last 7 days] = ?,
+                                            [App login done in last 7 days] = ?,
+                                            [Contact details fetched in last 7 days] = ?,
+                                            [raw_credits] = ?,
+                                            [Usage check] = ?
+                                        WHERE phone = ?
+                                    ''', (
+                                        str(latest_row['Last Sync in 7 days']),
+                                        str(latest_row['CP Usage in last 7 days']),
+                                        str(latest_row['App login done in last 7 days']),
+                                        str(latest_row['Contact details fetched in last 7 days']),
+                                        str(latest_row['raw_credits']),
+                                        str(latest_row['Usage check']),
+                                        str(p)
+                                    ))
+                                conn.commit()
+
+                                # Append fresh batch records
                                 out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
                             else:
                                 st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
