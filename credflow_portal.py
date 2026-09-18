@@ -40,10 +40,11 @@ if PERSISTENT_DB != REPO_DB:
         except Exception:
             pass
     elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Initialize sales_plan_history from clean_master_data.csv.gz ONLY if database is completely empty
+        # Auto-sync clean master data when scoring version changes or database has duplicate batches
         try:
             p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
             cur = p_conn.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
 
@@ -52,9 +53,12 @@ if PERSISTENT_DB != REPO_DB:
             p_conn.commit()
 
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-            if p_cnt == 0 and os.path.exists(csv_master):
+            cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
+            s_ver = cur.fetchone()
+            if (not s_ver or s_ver[0] != "v20260918_strict_table_v3" or p_cnt == 0 or p_cnt > 6000) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260918_strict_table_v3') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
@@ -980,7 +984,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 30:
             return "B/W 30 to 100", 2
         elif c_val > 0:
-            return "less than 30", 1
+            return "less than 30", 0
         else:
             return "None", 0
     elif tier == 'PRO':
@@ -989,7 +993,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 200:
             return "B/W 200 to 500", 2
         elif c_val > 0:
-            return "less than 200", 1
+            return "less than 200", 0
         else:
             return "None", 0
     else: # ENTERPRISE / PREMIUM / BVP
@@ -998,7 +1002,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
         elif c_val >= 500:
             return "B/W 500 to 1000", 2
         elif c_val > 0:
-            return "less than 500", 1
+            return "less than 500", 0
         else:
             return "None", 0
 
