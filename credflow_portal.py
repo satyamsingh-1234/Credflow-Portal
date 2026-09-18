@@ -55,7 +55,7 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260918_strict_table_v3" or p_cnt == 0 or p_cnt > 6000) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260918_strict_table_v3" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260918_strict_table_v3') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
@@ -2000,12 +2000,11 @@ def render_dashboard(df_sales, prefix):
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
     usage_opts = ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢", "No Data (Not Uploaded)"]
     
-    # ── TOP DATE / COHORT DROPDOWN FILTER ──
     batches_in_data = []
     if 'Upload_Batch' in df_sales.columns:
         for b in df_sales['Upload_Batch'].dropna().unique():
             b_str = str(b).strip()
-            if b_str and b_str.lower() not in ['nan', 'none', 'july.csv', 'aug.csv', 'july_adoption_project', '08092026.csv']:
+            if b_str and b_str not in ['July.csv', 'Aug.csv', 'nan', 'none', '']:
                 batches_in_data.append(b_str)
 
     dp_opts = [
@@ -2602,10 +2601,11 @@ def render_crm(cx_df):
             'call_status': 'Call Status',
             'remarks': 'Remarks',
             'issue_type': 'Issue Type',
-            'plan_of_action': 'Plan of Action'
+            'plan_of_action': 'Plan of Action',
+            'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -4167,6 +4167,7 @@ with tab_upload:
 
                                 # Append fresh batch records
                                 out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
+                                conn.commit()
                             else:
                                 st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
                                 st.stop()
@@ -4310,6 +4311,18 @@ with tab_upload:
                                 st.cache_data.clear()
                                 st.success(f"Successfully deleted {len(extra_batches)} extra batches! Data is now clean and deduplicated.")
                                 st.rerun()
+
+                    st.markdown("#### 📋 All Active Files & Batches in System")
+                    batch_summary = []
+                    for b in s_batches['Upload_Batch'].dropna().tolist():
+                        cnt_row = conn.execute("SELECT COUNT(*), COUNT(DISTINCT phone) FROM sales_plan_history WHERE Upload_Batch = ?", (b,)).fetchone()
+                        batch_summary.append({
+                            "📁 Uploaded File / Batch Name": b,
+                            "Total Rows": cnt_row[0],
+                            "Unique Customers": cnt_row[1]
+                        })
+                    st.dataframe(pd.DataFrame(batch_summary), use_container_width=True, hide_index=True)
+                    st.markdown("---")
 
                     st.markdown("#### 📂 Manage Individual Upload Batches")
                     col_sel, col_del = st.columns([8, 2])
