@@ -28,26 +28,7 @@ st.set_page_config(
 # ── DATABASE SETUP & CLOUD PERSISTENCE ──
 REPO_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
 
-BLANK_SETUP_PHONES = [
-    '6000477322', '6359448888', '6378971966', '7021233706', '7042634868',
-    '7275104900', '7488470293', '7506642145', '7518800851', '7666899968',
-    '7698892891', '7718045046', '7771000436', '8000006080', '8058555700',
-    '8091611066', '8125131008', '8178568904', '8248927038', '8298824366',
-    '8318900683', '8412885050', '8543830066', '8553530750', '8600792020',
-    '8625942777', '8655767806', '8788983650', '8820381451', '8826221166',
-    '8947956846', '8985899161', '9004695566', '9007965000', '9031817001',
-    '9040130900', '9081234307', '9161410410', '9177408900', '9218516521',
-    '9353004005', '9356802362', '9377466623', '9411860118', '9419197457',
-    '9425222500', '9433054334', '9434261745', '9443171424', '9448650003',
-    '9459660223', '9502898464', '9550758581', '9617499457', '9619223001',
-    '9650147569', '9650503147', '9667578521', '9712346086', '9738028263',
-    '9765652885', '9783976760', '9784084640', '9810185443', '9815667666',
-    '9820147584', '9824750212', '9828073737', '9845022935', '9848015159',
-    '9867118811', '9874683583', '9881100960', '9897238787', '9915634120',
-    '9920306168', '9923704730', '9924910414', '9935065686', '9944924239',
-    '9958266994', '9966400036', '9996971553', '9999024204', '9999226161'
-]
-BLANK_SETUP_PHONES_SET = set(BLANK_SETUP_PHONES)
+# BLANK_SETUP_PHONES removed: blank setup strictly evaluated from sync column only
 
 # Use /tmp on Linux/Streamlit Cloud to preserve live web user edits across Git redeployments
 TMP_DIR = "/tmp" if os.name != 'nt' and os.path.exists("/tmp") else None
@@ -85,15 +66,16 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v10" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v11" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
-                # Ensure all 4 standard batches are in persistent DB
+                # Ensure all batches are in persistent DB
                 batches_to_sync = list(clean_df['Upload_Batch'].dropna().unique())
                 if batches_to_sync:
                     b_placeholders = ','.join(['?'] * len(batches_to_sync))
                     p_conn.execute(f"DELETE FROM sales_plan_history WHERE Upload_Batch IN ({b_placeholders})", batches_to_sync)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v10') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v11') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'JULY2106(1).CSV') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
