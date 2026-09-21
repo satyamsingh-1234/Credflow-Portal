@@ -85,7 +85,7 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v9" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v10" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 # Ensure all 4 standard batches are in persistent DB
                 batches_to_sync = list(clean_df['Upload_Batch'].dropna().unique())
@@ -93,7 +93,7 @@ if PERSISTENT_DB != REPO_DB:
                     b_placeholders = ','.join(['?'] * len(batches_to_sync))
                     p_conn.execute(f"DELETE FROM sales_plan_history WHERE Upload_Batch IN ({b_placeholders})", batches_to_sync)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v9') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v10') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
@@ -1959,42 +1959,33 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v8"):
                 filtered[col] = eval_df[col]
             
     def _validate_row_usage_health(row):
-        existing_status = str(row.get('Usage check', '')).strip()
-        # 1. If database already has an assigned standardized status, preserve it!
-        if existing_status in ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "Channel Partner 🤝"]:
-            return existing_status
-
-        if 'Channel Partner' in existing_status or 'Partner' in existing_status:
-            return "Channel Partner 🤝"
-
-        if 'Not Started' in existing_status or 'Blank' in existing_status:
-            return "Not Started / Blank Setup ⚪"
-
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
         comp_name = str(row.get('Name', row.get('company_name', ''))).lower()
         if 'partner client' in comp_name or phone_clean == '9765652885':
             return "Channel Partner 🤝"
 
         raw_s = row.get('Last Sync in 7 days', '')
+
+        # 1. Blank Setup: ONLY when Sync is truly blank / missing / null
+        is_s_blank = pd.isna(raw_s) or str(raw_s).strip().lower() in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']
+        if is_s_blank:
+            return "Not Started / Blank Setup ⚪"
+
+        # 2. Sync is present (Within 7 days or More than 7 days) -> Never Blank Setup!
+        s_lower = str(raw_s).strip().lower()
+        s_val = "Yes" if any(k in s_lower for k in ['within', 'yes', 'true', '1', 'connected', 'active', 'running', 'live', 'ok', 'success', 'syncing', 'synced']) else "No"
+
         raw_l = row.get('App login done in last 7 days', '')
         raw_c = row.get('raw_credits', row.get('CP Usage in last 7 days', 0))
 
         c_val = parse_credits_num(raw_c)
-        s_val = parse_sync_status(raw_s)
         l_val = parse_login_status(raw_l)
         ct_val = parse_credits_num(row.get('Contact details fetched in last 7 days', 0))
         plan_n = str(row.get('plan name', ''))
 
-        # If sync status is available (Yes or No), evaluate usage health - NEVER override to Not Started / Blank!
-        if s_val == "Yes":
-            return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
-        elif s_val == "No":
-            # Synced in past but stopped in last 7 days -> No Usage or Low Usage, NEVER Blank Setup!
-            return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
-
-        # Blank Setup ONLY when Sync is truly blank / missing / null
-        if is_field_blank(raw_s) or str(raw_s).strip().lower() in ['blank / not synced', 'blank', 'not synced', 'nan', 'none']:
-            return "Not Started / Blank Setup ⚪"
+        existing_status = str(row.get('Usage check', '')).strip()
+        if existing_status in ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"]:
+            return existing_status
 
         return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
 
@@ -2010,8 +2001,13 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v8"):
     eval_df['CP Usage in last 7 days'] = eval_df.apply(_eval_row_cp_label, axis=1)
     filtered['CP Usage in last 7 days'] = eval_df['CP Usage in last 7 days']
 
-    # Standardize Last Sync in 7 days display column to Clean Yes / No
-    eval_df['Last Sync in 7 days'] = eval_df['Last Sync in 7 days'].apply(parse_sync_status)
+    # Standardize Last Sync in 7 days display column
+    def _display_sync_status(val):
+        if pd.isna(val) or str(val).strip().lower() in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']:
+            return "Blank / Not Synced"
+        return parse_sync_status(val)
+
+    eval_df['Last Sync in 7 days'] = eval_df['Last Sync in 7 days'].apply(_display_sync_status)
     filtered['Last Sync in 7 days'] = eval_df['Last Sync in 7 days']
 
     if 'phone' in eval_df.columns and 'Usage check' in eval_df.columns:
@@ -4595,9 +4591,7 @@ with tab_upload:
                                 login_7d = parse_login_status(raw_l) if col_login else "No"
                                 sync_7d = parse_sync_status(raw_s) if col_sync else "No"
 
-                                is_s_blank = is_field_blank(raw_s)
-                                is_l_blank = is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']
-                                is_blank_setup = (is_s_blank and is_l_blank and (c_val <= 0)) or (phone_clean_match in BLANK_SETUP_PHONES_SET and c_val <= 0)
+                                is_s_blank = pd.isna(raw_s) or str(raw_s).strip().lower() in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']
 
                                 contact_val = parse_credits_num(row[col_contacts]) if col_contacts else 0.0
                                 if contact_val > 30:
@@ -4609,7 +4603,12 @@ with tab_upload:
                                 else:
                                     contact_7d = "None"
 
-                                health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val, is_blank_setup=is_blank_setup)
+                                if 'partner client' in cx_name.lower() or phone_clean_match == '9765652885':
+                                    health_status = "Channel Partner 🤝"
+                                elif is_s_blank:
+                                    health_status = "Not Started / Blank Setup ⚪"
+                                else:
+                                    health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val, is_blank_setup=False)
 
                                 row['Credits used'] = c_val
 
@@ -4626,7 +4625,7 @@ with tab_upload:
                                         "Plan Stat Date": plan_start,
                                         "Plan End Date": plan_end,
                                         "Usage check": health_status,
-                                        "Last Sync in 7 days": "Blank / Not Synced" if (is_s_blank or is_blank_setup) else sync_7d,
+                                        "Last Sync in 7 days": "Blank / Not Synced" if is_s_blank else sync_7d,
                                         "CP Usage in last 7 days": cp_7d,
                                         "Contact details fetched in last 7 days": contact_7d,
                                         "App login done in last 7 days": login_7d,
