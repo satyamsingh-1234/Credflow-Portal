@@ -1135,8 +1135,18 @@ def find_usage_columns(df):
     return col_sync, col_credits, col_login, col_contacts
 
 
-def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0):
+def is_field_blank(val):
+    if val is None or pd.isna(val):
+        return True
+    s = str(val).strip().lower()
+    return not s or s in ['nan', 'none', 'null', 'nil', '', '-', 'n/a', 'blank']
+
+
+def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0, is_blank_setup=False):
     """Computes Usage Health score strictly following the original Points Matrix"""
+    if is_blank_setup:
+        return "Not Started / Blank Setup ⚪"
+
     sync_yes = (sync_7d == "Yes")
     login_yes = (login_7d == "Yes")
     
@@ -1914,11 +1924,24 @@ def prepare_eval_df(df_sales, cache_key="v20260918_dashboard_rule_v2"):
                 filtered[col] = eval_df[col]
             
     def _validate_row_usage_health(row):
-        c_val = parse_credits_num(row.get('raw_credits', row.get('CP Usage in last 7 days', 0)))
-        s_val = parse_sync_status(row.get('Last Sync in 7 days', ''))
-        l_val = parse_login_status(row.get('App login done in last 7 days', ''))
+        existing_status = str(row.get('Usage check', '')).strip()
+        if 'Not Started' in existing_status or 'Blank' in existing_status:
+            return "Not Started / Blank Setup ⚪"
+
+        raw_s = row.get('Last Sync in 7 days', '')
+        raw_l = row.get('App login done in last 7 days', '')
+        raw_c = row.get('raw_credits', row.get('CP Usage in last 7 days', 0))
+
+        c_val = parse_credits_num(raw_c)
+        s_val = parse_sync_status(raw_s)
+        l_val = parse_login_status(raw_l)
         ct_val = parse_credits_num(row.get('Contact details fetched in last 7 days', 0))
         plan_n = str(row.get('plan name', ''))
+
+        # If Last Sync is blank, login is blank or 'no', and credits <= 0 -> Not Started / Blank Setup ⚪
+        if is_field_blank(raw_s) and (is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']) and c_val <= 0:
+            return "Not Started / Blank Setup ⚪"
+
         return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
 
     eval_df['Usage check'] = eval_df.apply(_validate_row_usage_health, axis=1)
@@ -2042,7 +2065,7 @@ def render_dashboard(df_sales, prefix):
     
     temp_plans = df_sales['plan name'].replace("", pd.NA).ffill()
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
-    usage_opts = ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢", "No Data (Not Uploaded)"]
+    usage_opts = ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "No Data (Not Uploaded)"]
     
     batches_in_data = []
     if 'Upload_Batch' in df_sales.columns:
@@ -2226,10 +2249,11 @@ def render_dashboard(df_sales, prefix):
     dash_df = eval_df.drop_duplicates(subset=['phone'], keep='last').copy()
 
     # Usage counts
-    no_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('No Usage', na=False)])
+    not_started = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+    no_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
     low_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
     proper_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
-    no_data = unique_cx - no_usage - low_usage - proper_usage
+    no_data = max(0, unique_cx - not_started - no_usage - low_usage - proper_usage)
 
     dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
@@ -2241,11 +2265,12 @@ def render_dashboard(df_sales, prefix):
     email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
 
     # ── ROW 1: KPI Cards ──
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("👥 Total Customers", unique_cx)
-    k2.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
+    k2.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="normal")
     k3.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
-    k4.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="normal")
+    k4.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
+    k5.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
 
     # ── ROW 2: Outreach KPIs ──
     o1, o2, o3, o4 = st.columns(4)
@@ -2261,8 +2286,8 @@ def render_dashboard(df_sales, prefix):
 
     with ch1:
         usage_data = pd.DataFrame({
-            'Status': ['No Usage 🔴', 'Low Usage 🟡', 'Proper Usage 🟢', 'No Data'],
-            'Count': [no_usage, low_usage, proper_usage, no_data]
+            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪', 'No Data'],
+            'Count': [proper_usage, low_usage, no_usage, not_started, no_data]
         })
         usage_data = usage_data[usage_data['Count'] > 0]
         fig_usage = px.pie(
@@ -2270,10 +2295,11 @@ def render_dashboard(df_sales, prefix):
             title='Usage Health Breakdown',
             color='Status',
             color_discrete_map={
-                'No Usage 🔴': '#EF4444',
-                'Low Usage 🟡': '#F59E0B',
                 'Proper Usage 🟢': '#10B981',
-                'No Data': '#9CA3AF'
+                'Low Usage 🟡': '#F59E0B',
+                'No Usage 🔴': '#EF4444',
+                'Not Started / Blank ⚪': '#94A3B8',
+                'No Data': '#D1D5DB'
             },
             hole=0.45
         )
@@ -2337,11 +2363,12 @@ def render_dashboard(df_sales, prefix):
         ---
 
         ### 🚦 Health Category Classification Rules:
-        - 🔴 **No Usage (Score = 0)**: Inactive customers *(Incomplete setup, zero credits used, no sync, no login)*.
-        - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
         - 🟢 **Proper Usage (Score ≥ 4 OR Lite Plan with Login + Sync)**: Active, engaged customers utilizing CredFlow.
+        - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
+        - 🔴 **No Usage (Score = 0)**: Inactive tracked customers *(Account active/connected, but 0 credits used and out of sync > 7 days)*.
+        - ⚪ **Not Started / Blank Setup**: Customers with Blank Last Sync, Blank App Login, and 0 Credits *(Initial desktop sync/setup pending or not initiated)*.
         
-        > 💡 **Presentation Note**: All missing data cells, empty fields, and `NaN` values are strictly assigned **`0 Points ("None")`**. This guarantees zero false positives for *Proper Usage 🟢*.
+        > 💡 **Presentation Note**: Blank and 0 are strictly segregated. Missing/untracked sync records are kept in **Not Started ⚪** and excluded from **No Usage 🔴** to ensure 100% accurate health tracking.
         """)
 
     st.markdown("---")
@@ -2397,7 +2424,7 @@ def render_crm(cx_df):
                 test_pwa_name = st.text_input("Customer Name", value="Test Customer", key="test_pwa_name")
             tp3, tp4 = st.columns(2)
             with tp3:
-                test_pwa_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_pwa_health")
+                test_pwa_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_pwa_health")
             with tp4:
                 test_pwa_plan = st.text_input("Plan Name", value="Premium Plan", key="test_pwa_plan")
                 
@@ -2429,7 +2456,7 @@ def render_crm(cx_df):
                 test_wa_name = st.text_input("Customer Name", value="Test Customer", key="test_wa_name")
             tc3, tc4 = st.columns(2)
             with tc3:
-                test_wa_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_wa_health")
+                test_wa_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_wa_health")
             with tc4:
                 test_wa_credits = st.text_input("Raw Credits / Used", value="500", key="test_wa_credits")
                 
@@ -2453,7 +2480,7 @@ def render_crm(cx_df):
                 test_email_name = st.text_input("Customer Name", value="Test Customer", key="test_email_name")
             tec3, tec4 = st.columns(2)
             with tec3:
-                test_email_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_email_health")
+                test_email_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_email_health")
             with tec4:
                 test_email_plan = st.text_input("Plan Name", value="Premium Plan", key="test_email_plan")
                 
@@ -3129,8 +3156,11 @@ def render_batch_comparison(conn):
     total_old = len(cx_old)
     total_new = len(cx_new)
 
-    no_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('No Usage', na=False)])
-    no_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('No Usage', na=False)])
+    ns_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+    ns_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+
+    no_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_old['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+    no_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_new['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
 
     low_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Low Usage', na=False)])
     low_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Low Usage', na=False)])
@@ -3140,17 +3170,18 @@ def render_batch_comparison(conn):
 
     # Metrics delta cards
     st.markdown("#### 📊 Side-by-Side KPI Comparison")
-    mc1, mc2, mc3, mc4 = st.columns(4)
+    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
     mc1.metric("👥 Total Customers", f"A: {total_old} | B: {total_new}", delta=f"{total_new - total_old} ({round((total_new - total_old)/total_old*100) if total_old else 0}%)")
-    mc2.metric("🔴 No Usage", f"A: {no_old} | B: {no_new}", delta=f"{no_new - no_old}", delta_color="inverse")
+    mc2.metric("🟢 Proper Usage", f"A: {prop_old} | B: {prop_new}", delta=f"{prop_new - prop_old}", delta_color="normal")
     mc3.metric("🟡 Low Usage", f"A: {low_old} | B: {low_new}", delta=f"{low_new - low_old}", delta_color="off")
-    mc4.metric("🟢 Proper Usage", f"A: {prop_old} | B: {prop_new}", delta=f"{prop_new - prop_old}", delta_color="normal")
+    mc4.metric("🔴 No Usage", f"A: {no_old} | B: {no_new}", delta=f"{no_new - no_old}", delta_color="inverse")
+    mc5.metric("⚪ Not Started", f"A: {ns_old} | B: {ns_new}", delta=f"{ns_new - ns_old}", delta_color="off")
 
     # Side-by-Side Bar Chart
     comp_chart_df = pd.DataFrame({
-        'Status': ['No Usage 🔴', 'Low Usage 🟡', 'Proper Usage 🟢'] * 2,
-        'Batch': ['Batch A (Older)'] * 3 + ['Batch B (Newer)'] * 3,
-        'Customers': [no_old, low_old, prop_old, no_new, low_new, prop_new]
+        'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started ⚪'] * 2,
+        'Batch': ['Batch A (Older)'] * 4 + ['Batch B (Newer)'] * 4,
+        'Customers': [prop_old, low_old, no_old, ns_old, prop_new, low_new, no_new, ns_new]
     })
     
     fig_comp = px.bar(
@@ -4485,11 +4516,19 @@ with tab_upload:
                                     features = [plan_name]
 
                                 # ── ACCURATE USAGE EXTRACTION & EVALUATION ──
-                                c_val = parse_credits_num(row[col_credits]) if col_credits else 0.0
+                                raw_s = row[col_sync] if col_sync else None
+                                raw_l = row[col_login] if col_login else None
+                                raw_c = row[col_credits] if col_credits else None
+
+                                c_val = parse_credits_num(raw_c) if col_credits else 0.0
                                 cp_7d, _ = eval_plan_credits_and_score(plan_name, c_val)
 
-                                login_7d = parse_login_status(row[col_login]) if col_login else "No"
-                                sync_7d = parse_sync_status(row[col_sync]) if col_sync else "No"
+                                login_7d = parse_login_status(raw_l) if col_login else "No"
+                                sync_7d = parse_sync_status(raw_s) if col_sync else "No"
+
+                                is_s_blank = is_field_blank(raw_s)
+                                is_l_blank = is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']
+                                is_blank_setup = is_s_blank and is_l_blank and (c_val <= 0)
 
                                 contact_val = parse_credits_num(row[col_contacts]) if col_contacts else 0.0
                                 if contact_val > 30:
@@ -4501,7 +4540,7 @@ with tab_upload:
                                 else:
                                     contact_7d = "None"
 
-                                health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val)
+                                health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val, is_blank_setup=is_blank_setup)
 
                                 row['Credits used'] = c_val
 
@@ -4518,7 +4557,7 @@ with tab_upload:
                                         "Plan Stat Date": plan_start,
                                         "Plan End Date": plan_end,
                                         "Usage check": health_status,
-                                        "Last Sync in 7 days": sync_7d,
+                                        "Last Sync in 7 days": "" if is_s_blank else sync_7d,
                                         "CP Usage in last 7 days": cp_7d,
                                         "Contact details fetched in last 7 days": contact_7d,
                                         "App login done in last 7 days": login_7d,
