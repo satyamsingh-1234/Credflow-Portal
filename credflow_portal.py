@@ -3932,6 +3932,331 @@ def render_template_manager(conn):
                         st.rerun()
 
 
+# ── WEEKLY CREDIT POINTS USAGE & ADOPTION TRACKER (ISOLATED SECTION) ──
+def render_weekly_cp_tracker(conn):
+    """Isolated Weekly CP Tracker: Tracks within-7-days Credit Points consumption without modifying master data."""
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS weekly_cp_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                week_label TEXT,
+                upload_date TEXT,
+                phone TEXT,
+                customer_name TEXT,
+                email TEXT,
+                plan_name TEXT,
+                weekly_cp_used REAL,
+                sync_7d TEXT,
+                login_7d TEXT,
+                health_status TEXT,
+                score INTEGER,
+                created_at TEXT
+            )
+        ''')
+        conn.commit()
+    except Exception:
+        pass
+
+    st.subheader("📅 Weekly Credit Points Usage & Adoption Tracker")
+    st.caption("Har 1-week (last 7 days) ke credit points consumption ka analysis. Yahan aap apni weekly usage sheet upload karke adoption health monitor kar sakte hain.")
+
+    # ── SECTION 1: UPLOAD WEEKLY CP USAGE SHEET ──
+    with st.expander("📤 Upload New Weekly Usage Sheet (Excel / CSV)", expanded=False):
+        u_col1, u_col2 = st.columns([2, 1])
+        with u_col1:
+            uploaded_weekly = st.file_uploader("📂 Upload 1-Week Credit Points Usage File", type=["xlsx", "xls", "csv", "txt"], key="uploader_weekly_cp")
+        with u_col2:
+            default_label = f"Week of {datetime.now().strftime('%d %b %Y')}"
+            week_label_input = st.text_input("🏷️ Week Label / Title", value=default_label, key="input_week_label_cp", help="Jaise: Week 1 (15-21 Sep) ya Week of 21 Sep 2026")
+
+        if uploaded_weekly:
+            w_file_id = getattr(uploaded_weekly, 'file_id', uploaded_weekly.name + str(uploaded_weekly.size))
+            if st.session_state.get('last_processed_weekly_id') != w_file_id:
+                try:
+                    def _load_w_file(f_obj):
+                        fn = getattr(f_obj, 'name', '').lower()
+                        f_obj.seek(0)
+                        if fn.endswith(('.csv', '.txt')):
+                            for enc in ['utf-8', 'latin1', 'cp1252', 'utf-8-sig']:
+                                try:
+                                    f_obj.seek(0)
+                                    return pd.read_csv(f_obj, encoding=enc)
+                                except Exception:
+                                    pass
+                        for eng in ['openpyxl', None]:
+                            try:
+                                f_obj.seek(0)
+                                return pd.read_excel(f_obj, engine=eng) if eng else pd.read_excel(f_obj)
+                            except Exception:
+                                pass
+                        f_obj.seek(0)
+                        return pd.read_csv(f_obj, on_bad_lines='skip')
+
+                    raw_w_df = _load_w_file(uploaded_weekly)
+
+                    def _find_w_col(df, keywords):
+                        for col in df.columns:
+                            col_clean = str(col).lower().replace('_', ' ').strip()
+                            for kw in keywords:
+                                if kw.lower() in col_clean:
+                                    return col
+                        return None
+
+                    w_col_phone = _find_w_col(raw_w_df, ['phone', 'mobile', 'contact', 'user id'])
+                    w_col_name  = _find_w_col(raw_w_df, ['customer name', 'name', 'customer', 'first name', 'company name', 'company'])
+                    w_col_email = _find_w_col(raw_w_df, ['email', 'mail'])
+                    w_col_cp    = _find_w_col(raw_w_df, ['cp usage in last 7 days', 'cp usage', 'credits used', 'credit points', 'credits', 'cp', 'usage'])
+                    w_col_sync  = _find_w_col(raw_w_df, ['last sync in 7 days', 'last sync', 'sync', 'syncing'])
+                    w_col_login = _find_w_col(raw_w_df, ['app login done in last 7 days', 'app login', 'login', 'last login'])
+                    w_col_plan  = _find_w_col(raw_w_df, ['plan name', 'plan', 'package'])
+
+                    if not w_col_phone:
+                        st.error("❌ Could not find Phone/Mobile column in uploaded weekly file. Kripya file headers check karein.")
+                        st.stop()
+
+                    master_lookup = {}
+                    try:
+                        m_rows = conn.execute("SELECT phone, Name, email, [plan name], [Last Sync in 7 days], [App login done in last 7 days] FROM sales_plan_history").fetchall()
+                        for mr in m_rows:
+                            mp = str(mr[0]).replace('.0', '').strip()
+                            if mp and mp not in master_lookup:
+                                master_lookup[mp] = {
+                                    'name': mr[1] or '',
+                                    'email': mr[2] or '',
+                                    'plan': mr[3] or 'Standard Plan',
+                                    'sync': mr[4] or 'No',
+                                    'login': mr[5] or 'No'
+                                }
+                    except Exception:
+                        pass
+
+                    w_rows = []
+                    today_str = datetime.now().strftime('%d/%m/%Y')
+                    clean_week_tag = week_label_input.strip() if week_label_input.strip() else default_label
+
+                    for _, r in raw_w_df.iterrows():
+                        p_val = str(r.get(w_col_phone, '')).replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
+                        if not p_val or p_val.lower() in ['nan', 'none', '']:
+                            continue
+
+                        cx_info = master_lookup.get(p_val, {})
+                        c_name = str(r.get(w_col_name, cx_info.get('name', 'Unknown'))).strip()
+                        c_email = str(r.get(w_col_email, cx_info.get('email', ''))).strip()
+                        p_name = str(r.get(w_col_plan, cx_info.get('plan', 'Standard Plan'))).strip()
+                        if not p_name or p_name.lower() in ['nan', 'none']:
+                            p_name = cx_info.get('plan', 'Standard Plan')
+
+                        cp_raw = r.get(w_col_cp, 0) if w_col_cp else 0
+                        cp_num = parse_credits_num(cp_raw)
+
+                        sync_raw = r.get(w_col_sync, cx_info.get('sync', 'No')) if w_col_sync else cx_info.get('sync', 'No')
+                        sync_val = parse_sync_status(sync_raw)
+
+                        login_raw = r.get(w_col_login, cx_info.get('login', 'No')) if w_col_login else cx_info.get('login', 'No')
+                        login_val = parse_login_status(login_raw)
+
+                        pn_upper = p_name.upper()
+                        is_lite = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
+
+                        if is_lite and login_val == 'Yes' and sync_val == 'Yes':
+                            health = "Proper Usage 🟢"
+                            score = 4
+                        else:
+                            _, cp_pts = eval_plan_credits_and_score(p_name, cp_num)
+                            score = (2 if login_val == 'Yes' else 0) + (1 if sync_val == 'Yes' else 0) + cp_pts
+                            if score >= 4:
+                                health = "Proper Usage 🟢"
+                            elif score >= 1:
+                                health = "Low Usage 🟡"
+                            else:
+                                health = "No Usage 🔴"
+
+                        w_rows.append((
+                            clean_week_tag,
+                            today_str,
+                            p_val,
+                            c_name,
+                            c_email,
+                            p_name,
+                            cp_num,
+                            sync_val,
+                            login_val,
+                            health,
+                            score,
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        ))
+
+                    if w_rows:
+                        conn.execute("DELETE FROM weekly_cp_tracking WHERE week_label = ?", (clean_week_tag,))
+                        conn.executemany('''
+                            INSERT INTO weekly_cp_tracking 
+                            (week_label, upload_date, phone, customer_name, email, plan_name, weekly_cp_used, sync_7d, login_7d, health_status, score, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', w_rows)
+                        conn.commit()
+
+                        st.session_state['last_processed_weekly_id'] = w_file_id
+                        st.session_state['weekly_upload_success'] = {
+                            'week': clean_week_tag,
+                            'total': len(w_rows),
+                            'unique_p': len(set(x[2] for x in w_rows))
+                        }
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ No valid customer rows found in weekly sheet.")
+                except Exception as e:
+                    st.error(f"Error processing weekly sheet: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
+    if 'weekly_upload_success' in st.session_state:
+        winfo = st.session_state['weekly_upload_success']
+        st.success(f"🎉 **{winfo['week']} Data Saved Successfully!** Processed {winfo['total']} rows ({winfo['unique_p']} Unique Customers).")
+
+    st.markdown("---")
+
+    # ── SECTION 2: WEEK SELECTOR & WEEKLY DASHBOARD ──
+    weeks_available = [r[0] for r in conn.execute("SELECT DISTINCT week_label FROM weekly_cp_tracking ORDER BY id DESC").fetchall()]
+
+    if not weeks_available:
+        st.info("👋 **Welcome to Weekly CP Usage Tracker!** Abhi koi weekly data upload nahi hua hai. Kripya upar diye gaye **'Upload New Weekly Usage Sheet'** expander ko kholkar apni 1-week ki sheet upload karein.")
+        return
+
+    wk_c1, wk_c2 = st.columns([3, 1])
+    with wk_c1:
+        sel_week = st.selectbox("📅 Select Week to View / Analyze", weeks_available, key="select_active_week_cp")
+    with wk_c2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🗑️ Delete This Week", key="btn_del_week", use_container_width=True):
+            conn.execute("DELETE FROM weekly_cp_tracking WHERE week_label = ?", (sel_week,))
+            conn.commit()
+            st.cache_data.clear()
+            st.success(f"Deleted {sel_week} data!")
+            st.rerun()
+
+    week_df = pd.read_sql("SELECT * FROM weekly_cp_tracking WHERE week_label = ?", conn, params=(sel_week,))
+    if week_df.empty:
+        st.warning("No data found for selected week.")
+        return
+
+    cx_week = week_df.drop_duplicates(subset=['phone'], keep='last').copy()
+    total_cx_w = len(cx_week)
+    proper_w = len(cx_week[cx_week['health_status'].str.contains('Proper Usage', na=False)])
+    low_w = len(cx_week[cx_week['health_status'].str.contains('Low Usage', na=False)])
+    no_w = len(cx_week[cx_week['health_status'].str.contains('No Usage', na=False)])
+    total_cp_consumed = int(cx_week['weekly_cp_used'].fillna(0).sum())
+
+    # ── ROW 1: Weekly KPI Cards ──
+    wk1, wk2, wk3, wk4, wk5 = st.columns(5)
+    wk1.metric("👥 Total Customers", total_cx_w)
+    wk2.metric("🟢 Proper Usage", proper_w, delta=f"{round(proper_w/total_cx_w*100)}%" if total_cx_w else "0%")
+    wk3.metric("🟡 Low Usage", low_w, delta=f"{round(low_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="off")
+    wk4.metric("🔴 No Usage", no_w, delta=f"{round(no_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="inverse")
+    wk5.metric("⚡ Total CP Consumed", f"{total_cp_consumed:,}")
+
+    # ── ROW 2: Charts ──
+    wch1, wch2 = st.columns(2)
+    with wch1:
+        w_usage_data = pd.DataFrame({
+            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴'],
+            'Count': [proper_w, low_w, no_w]
+        })
+        w_usage_data = w_usage_data[w_usage_data['Count'] > 0]
+        fig_w_pie = px.pie(
+            w_usage_data, values='Count', names='Status',
+            title=f'Weekly Usage Health Breakdown ({sel_week})',
+            color='Status',
+            color_discrete_map={
+                'Proper Usage 🟢': '#10B981',
+                'Low Usage 🟡': '#F59E0B',
+                'No Usage 🔴': '#EF4444'
+            },
+            hole=0.45
+        )
+        fig_w_pie.update_traces(textposition='inside', textinfo='value+percent')
+        fig_w_pie.update_layout(height=340, margin=dict(t=40, b=20, l=20, r=20))
+        st.plotly_chart(fig_w_pie, use_container_width=True)
+
+    with wch2:
+        top_cp_cx = cx_week.sort_values(by='weekly_cp_used', ascending=False).head(10)
+        top_cp_cx = top_cp_cx[top_cp_cx['weekly_cp_used'] > 0]
+        if not top_cp_cx.empty:
+            top_cp_cx['Display_Name'] = top_cp_cx['customer_name'].fillna('') + ' (' + top_cp_cx['phone'] + ')'
+            fig_top_cp = px.bar(
+                top_cp_cx, x='weekly_cp_used', y='Display_Name',
+                title=f'Top 10 CP Consuming Customers ({sel_week})',
+                orientation='h',
+                color='weekly_cp_used',
+                color_continuous_scale='Greens',
+                labels={'weekly_cp_used': 'Weekly Credits Used', 'Display_Name': 'Customer'}
+            )
+            fig_top_cp.update_layout(height=340, margin=dict(t=40, b=20, l=20, r=20), yaxis={'categoryorder': 'total ascending'}, showlegend=False)
+            st.plotly_chart(fig_top_cp, use_container_width=True)
+        else:
+            st.info("No credit points usage logged above 0 for this week.")
+
+    st.markdown("---")
+
+    # ── ROW 3: Interactive Weekly Customer Table ──
+    st.markdown(f"#### 📋 Weekly Customer Usage Table ({sel_week})")
+
+    wf1, wf2, wf3 = st.columns([2, 1, 1])
+    with wf1:
+        w_search = st.text_input("🔍 Search Customer Name or Phone", key="w_search_input")
+    with wf2:
+        w_health_filter = st.selectbox("🚦 Filter Health Status", ["All", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"], key="w_health_select")
+    with wf3:
+        all_w_plans = ["All"] + sorted([str(p) for p in cx_week['plan_name'].dropna().unique() if str(p).strip()])
+        w_plan_filter = st.selectbox("📊 Filter Plan", all_w_plans, key="w_plan_select")
+
+    tbl_df = cx_week.copy()
+    if w_search:
+        tbl_df = tbl_df[tbl_df['customer_name'].astype(str).str.contains(w_search, case=False, na=False) |
+                        tbl_df['phone'].astype(str).str.contains(w_search, case=False, na=False)]
+    if w_health_filter != "All":
+        tbl_df = tbl_df[tbl_df['health_status'] == w_health_filter]
+    if w_plan_filter != "All":
+        tbl_df = tbl_df[tbl_df['plan_name'] == w_plan_filter]
+
+    display_cols = ['customer_name', 'phone', 'email', 'plan_name', 'weekly_cp_used', 'sync_7d', 'login_7d', 'health_status', 'score']
+    tbl_display = tbl_df[display_cols].rename(columns={
+        'customer_name': 'Customer Name',
+        'phone': 'Phone',
+        'email': 'Email',
+        'plan_name': 'Plan Name',
+        'weekly_cp_used': '⚡ Weekly CP Used',
+        'sync_7d': 'Last Sync (7d)',
+        'login_7d': 'App Login (7d)',
+        'health_status': 'Usage Health',
+        'score': 'Score'
+    })
+
+    st.dataframe(tbl_display, use_container_width=True, hide_index=True)
+
+    d_c1, d_c2 = st.columns([1, 1])
+    with d_c1:
+        excel_weekly = to_excel_download(tbl_display, sheet_name="Weekly_Usage")
+        st.download_button(
+            f"📥 Download {sel_week} Data (Excel)",
+            data=excel_weekly,
+            file_name=f"CredFlow_{sel_week.replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            key=f"dl_w_excel_{sel_week}"
+        )
+    with d_c2:
+        csv_weekly = tbl_display.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            f"📄 Download {sel_week} Data (CSV)",
+            data=csv_weekly,
+            file_name=f"CredFlow_{sel_week.replace(' ', '_')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key=f"dl_w_csv_{sel_week}"
+        )
+
+
 # ── LOGO & HEADER SETUP ──
 logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
 if not os.path.exists(logo_path):
@@ -3979,8 +4304,9 @@ if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
     st.rerun()
 
 
-tab_dash, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
+tab_dash, tab_weekly, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
     "📊 Main Dashboard & CRM",
+    "📅 Weekly CP Usage Tracker",
     "⚔️ Compare 2 Batches Studio",
     "📜 Outreach & Dispatch History",
     "📝 Outreach Templates Manager",
@@ -4008,6 +4334,10 @@ with tab_dash:
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
+
+with tab_weekly:
+    with st.spinner("📅 Loading Weekly Credit Points Usage & Adoption Tracker..."):
+        render_weekly_cp_tracker(conn)
 
 with tab_comp:
     with st.spinner("⚔️ Calculating Cohort Comparison & Adoption Growth Rates..."):
