@@ -2272,16 +2272,18 @@ def render_dashboard(df_sales, prefix):
         eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
         
     # 4. Usage Health Filter (Strictly filter within current cohort/view)
+    dedup_cohort_cols = ['phone', 'Upload_Batch'] if 'Upload_Batch' in eval_df.columns else ['phone']
     if usage_filt:
-        latest_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')
+        latest_per_phone = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first')
         valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
         filtered = filtered[filtered['phone'].isin(valid_usage_phones) & filtered['Usage check'].isin(usage_filt)]
         eval_df = eval_df[eval_df['phone'].isin(valid_usage_phones) & eval_df['Usage check'].isin(usage_filt)]
         
-    unique_cx = eval_df['phone'].nunique()
+    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
+    unique_cx = len(dash_df)
     st.markdown(f"""
     <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 16px; margin: 10px 0 16px 0; color: #166534; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
-        <span>👥 <b>Showing {unique_cx} Unique Customers</b></span>
+        <span>👥 <b>Showing {unique_cx} Customers Across Cohorts</b></span>
         <span style="background: #10B981; color: white; border-radius: 12px; padding: 3px 12px; font-size: 12px; font-weight: 700;">Total {len(filtered)} Rows in View</span>
     </div>
     """, unsafe_allow_html=True)
@@ -2308,8 +2310,8 @@ def render_dashboard(df_sales, prefix):
         excel_dash = to_excel_download(filtered_export, sheet_name="Dashboard Data")
         st.download_button("📥 Export Filtered Data", data=excel_dash, file_name="Dashboard_Filtered_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
-    # Compute per-customer stats from eval_df (one row per phone)
-    dash_df = eval_df.drop_duplicates(subset=['phone'], keep='last').copy()
+    # Compute per-customer stats from eval_df (one record per phone per cohort batch)
+    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
 
     # Usage counts
     not_started = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
