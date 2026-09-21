@@ -56,6 +56,7 @@ if PERSISTENT_DB != REPO_DB:
             p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
             cur = p_conn.cursor()
             cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
+            cur.execute("CREATE TABLE IF NOT EXISTS known_channel_partners (phone TEXT PRIMARY KEY, name TEXT, partner_name TEXT, tag_source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
 
@@ -1951,6 +1952,14 @@ def prepare_eval_df(df_sales, cache_key="v20260921_channel_partners_v1"):
         '8412885050', '7518800851', '9650147569', '8178568904', 
         '8318900683', '6359448888', '8985899161', '9443171424'
     }
+    try:
+        with sqlite3.connect(DB_PATH, timeout=5.0) as _cp_c:
+            _cp_rows = _cp_c.execute("SELECT phone FROM known_channel_partners").fetchall()
+            for _r in _cp_rows:
+                if _r[0]:
+                    CHANNEL_PARTNER_PHONES.add(str(_r[0]).strip())
+    except Exception:
+        pass
 
     def _validate_row_usage_health(row):
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
@@ -4610,8 +4619,19 @@ with tab_upload:
                                 else:
                                     contact_7d = "None"
 
-                                if phone_clean_match in CHANNEL_PARTNER_PHONES or 'partner client' in cx_name.lower():
+                                # Auto-detect partner leads from row columns or known partner registry
+                                has_partner_col = any(
+                                    'partner' in str(_get_row_val(row, [c])).lower()
+                                    for c in ['channel partner name', 'channel partner', 'partner', 'contact source', 'notes', 'lead tagging', 'sub stage']
+                                )
+                                if phone_clean_match in CHANNEL_PARTNER_PHONES or 'partner client' in cx_name.lower() or has_partner_col:
                                     health_status = "Channel Partner 🤝"
+                                    try:
+                                        conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, tag_source) VALUES (?, ?, ?)", (phone_clean_match, cx_name, "Auto-detected from file upload"))
+                                        conn.commit()
+                                        CHANNEL_PARTNER_PHONES.add(phone_clean_match)
+                                    except Exception:
+                                        pass
                                 elif is_s_blank:
                                     health_status = "Not Started / Blank Setup ⚪"
                                 else:
