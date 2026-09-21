@@ -89,10 +89,15 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v6" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v7" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
-                clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v6') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                # Ensure all 4 standard batches are in persistent DB
+                batches_to_sync = list(clean_df['Upload_Batch'].dropna().unique())
+                if batches_to_sync:
+                    b_placeholders = ','.join(['?'] * len(batches_to_sync))
+                    p_conn.execute(f"DELETE FROM sales_plan_history WHERE Upload_Batch IN ({b_placeholders})", batches_to_sync)
+                clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v7') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
@@ -1937,7 +1942,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v6"):
+def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v7"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -2186,12 +2191,24 @@ def render_dashboard(df_sales, prefix):
             target_batch = date_preset.replace("📁 Today / Latest: ", "").strip()
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = (eval_df['Upload_Batch'].astype(str).str.strip().str.lower() == target_batch.lower())
+                if not batch_mask.any():
+                    tb_l = target_batch.lower()
+                    if any(k in tb_l for k in ['jul', '072026', 'july']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('jul')
+                    elif any(k in tb_l for k in ['aug', '082026', 'august']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('aug')
                 filtered = filtered[batch_mask]
                 eval_df = eval_df[batch_mask]
         elif date_preset.startswith("📁 Batch: "):
             target_batch = date_preset.replace("📁 Batch: ", "").strip()
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = (eval_df['Upload_Batch'].astype(str).str.strip().str.lower() == target_batch.lower())
+                if not batch_mask.any():
+                    tb_l = target_batch.lower()
+                    if any(k in tb_l for k in ['jul', '072026', 'july']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('jul')
+                    elif any(k in tb_l for k in ['aug', '082026', 'august']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('aug')
                 filtered = filtered[batch_mask]
                 eval_df = eval_df[batch_mask]
         elif date_preset == "July Cohort Data" or (date_preset.startswith("July") and not date_preset.startswith("📁")):
