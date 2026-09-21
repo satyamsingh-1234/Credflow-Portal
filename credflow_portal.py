@@ -2121,10 +2121,22 @@ def render_dashboard(df_sales, prefix):
     if not date_preset.startswith("🌐") and not date_preset.startswith("Overall Data"):
         today_d = date.today()
 
-        if "July" in date_preset and not date_preset.startswith("📁 Batch: "):
+        if date_preset.startswith("📁 Today / Latest: "):
+            target_batch = date_preset.replace("📁 Today / Latest: ", "").strip()
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = (eval_df['Upload_Batch'].astype(str).str.strip().str.lower() == target_batch.lower())
+                filtered = filtered[batch_mask]
+                eval_df = eval_df[batch_mask]
+        elif date_preset.startswith("📁 Batch: "):
+            target_batch = date_preset.replace("📁 Batch: ", "").strip()
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = (eval_df['Upload_Batch'].astype(str).str.strip().str.lower() == target_batch.lower())
+                filtered = filtered[batch_mask]
+                eval_df = eval_df[batch_mask]
+        elif date_preset == "July Cohort Data" or (date_preset.startswith("July") and not date_preset.startswith("📁")):
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = eval_df['Upload_Batch'].astype(str).apply(
-                    lambda b: b.strip().lower() in ['july.csv', 'july_adoption_project.csv', 'july']
+                    lambda b: any(k in b.strip().lower() for k in ['july', '072026', 'jul'])
                 )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 7)
@@ -2132,10 +2144,10 @@ def render_dashboard(df_sales, prefix):
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 7)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
-        elif "August" in date_preset and not date_preset.startswith("📁 Batch: "):
+        elif date_preset == "August Cohort Data" or (date_preset.startswith("August") and not date_preset.startswith("📁")):
             if 'Upload_Batch' in eval_df.columns:
                 batch_mask = eval_df['Upload_Batch'].astype(str).apply(
-                    lambda b: b.strip().lower() in ['aug.csv', '08092026.csv', 'aug']
+                    lambda b: any(k in b.strip().lower() for k in ['aug', '08092026', '082026'])
                 )
                 if not batch_mask.any():
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
@@ -2143,18 +2155,6 @@ def render_dashboard(df_sales, prefix):
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
-        elif date_preset.startswith("📁 Today / Latest: "):
-            target_batch = date_preset.replace("📁 Today / Latest: ", "").strip()
-            if 'Upload_Batch' in eval_df.columns:
-                batch_mask = (eval_df['Upload_Batch'].astype(str) == target_batch)
-                filtered = filtered[batch_mask]
-                eval_df = eval_df[batch_mask]
-        elif date_preset.startswith("📁 Batch: "):
-            target_batch = date_preset.replace("📁 Batch: ", "").strip()
-            if 'Upload_Batch' in eval_df.columns:
-                batch_mask = (eval_df['Upload_Batch'].astype(str) == target_batch)
-                filtered = filtered[batch_mask]
-                eval_df = eval_df[batch_mask]
         else:
             target_phones = None
             if "Last 30 Days" in date_preset:
