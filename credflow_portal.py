@@ -28,7 +28,25 @@ st.set_page_config(
 # ── DATABASE SETUP & CLOUD PERSISTENCE ──
 REPO_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_history.db"))
 
-BLANK_SETUP_PHONES = ['6000477322', '7021233706', '7275104900', '7488470293', '7506642145', '7518800851', '7666899968', '7698892891', '7718045046', '8058555700', '8125131008', '8298824366', '8318900683', '8412885050', '8543830066', '8553530750', '8600792020', '8625942777', '8655767806', '8788983650', '8820381451', '8826221166', '8947956846', '9004695566', '9007965000', '9031817001', '9040130900', '9081234307', '9218516521', '9356802362', '9377466623', '9448650003', '9550758581', '9619223001', '9650147569', '9650503147', '9765652885', '9783976760', '9784084640', '9815667666', '9820147584', '9824750212', '9845022935', '9848015159', '9874683583', '9897238787', '9923704730', '9935065686', '9958266994', '9999024204', '9999226161']
+BLANK_SETUP_PHONES = [
+    '6000477322', '6359448888', '6378971966', '7021233706', '7042634868',
+    '7275104900', '7488470293', '7506642145', '7518800851', '7666899968',
+    '7698892891', '7718045046', '7771000436', '8000006080', '8058555700',
+    '8091611066', '8125131008', '8178568904', '8248927038', '8298824366',
+    '8318900683', '8412885050', '8543830066', '8553530750', '8600792020',
+    '8625942777', '8655767806', '8788983650', '8820381451', '8826221166',
+    '8947956846', '8985899161', '9004695566', '9007965000', '9031817001',
+    '9040130900', '9081234307', '9161410410', '9177408900', '9218516521',
+    '9353004005', '9356802362', '9377466623', '9411860118', '9419197457',
+    '9425222500', '9433054334', '9434261745', '9443171424', '9448650003',
+    '9459660223', '9502898464', '9550758581', '9617499457', '9619223001',
+    '9650147569', '9650503147', '9667578521', '9712346086', '9738028263',
+    '9765652885', '9783976760', '9784084640', '9810185443', '9815667666',
+    '9820147584', '9824750212', '9828073737', '9845022935', '9848015159',
+    '9867118811', '9874683583', '9881100960', '9897238787', '9915634120',
+    '9920306168', '9923704730', '9924910414', '9935065686', '9944924239',
+    '9958266994', '9966400036', '9996971553', '9999024204', '9999226161'
+]
 BLANK_SETUP_PHONES_SET = set(BLANK_SETUP_PHONES)
 
 # Use /tmp on Linux/Streamlit Cloud to preserve live web user edits across Git redeployments
@@ -40,7 +58,8 @@ for db_target in set(filter(None, [REPO_DB, PERSISTENT_DB])):
     if os.path.exists(db_target):
         try:
             with sqlite3.connect(db_target, timeout=15.0) as t_conn:
-                t_conn.execute(f"UPDATE sales_plan_history SET [Usage check] = 'Not Started / Blank Setup ⚪', [Last Sync in 7 days] = 'Blank / Not Synced' WHERE phone IN ({','.join(['?']*len(BLANK_SETUP_PHONES))}) AND [Usage check] LIKE '%No Usage%'", BLANK_SETUP_PHONES)
+                placeholders = ','.join(['?'] * len(BLANK_SETUP_PHONES))
+                t_conn.execute(f"UPDATE sales_plan_history SET [Usage check] = 'Not Started / Blank Setup ⚪', [Last Sync in 7 days] = 'Blank / Not Synced' WHERE REPLACE(REPLACE(phone, '.0', ''), ' ', '') IN ({placeholders}) AND [Usage check] LIKE '%No Usage%'", BLANK_SETUP_PHONES)
                 t_conn.commit()
         except Exception:
             pass
@@ -63,16 +82,17 @@ if PERSISTENT_DB != REPO_DB:
 
             # In-place non-destructive update for outdated BVP labels (preserves user uploads)
             p_conn.execute("UPDATE sales_plan_history SET [CP Usage in last 7 days] = '>1000' WHERE [plan name] LIKE '%BVP%' AND ([CP Usage in last 7 days] LIKE '%100%' OR [CP Usage in last 7 days] = '>100')")
-            p_conn.execute(f"UPDATE sales_plan_history SET [Usage check] = 'Not Started / Blank Setup ⚪', [Last Sync in 7 days] = 'Blank / Not Synced' WHERE phone IN ({','.join(['?']*len(BLANK_SETUP_PHONES))}) AND [Usage check] LIKE '%No Usage%'", BLANK_SETUP_PHONES)
+            placeholders = ','.join(['?'] * len(BLANK_SETUP_PHONES))
+            p_conn.execute(f"UPDATE sales_plan_history SET [Usage check] = 'Not Started / Blank Setup ⚪', [Last Sync in 7 days] = 'Blank / Not Synced' WHERE REPLACE(REPLACE(phone, '.0', ''), ' ', '') IN ({placeholders}) AND [Usage check] LIKE '%No Usage%'", BLANK_SETUP_PHONES)
             p_conn.commit()
 
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v5" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v6" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v5') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v6') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
@@ -1917,7 +1937,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v5"):
+def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v6"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1954,7 +1974,7 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v5"):
         plan_n = str(row.get('plan name', ''))
 
         # Check known blank setup phones or blank sync cells
-        if phone_clean in BLANK_SETUP_PHONES_SET and c_val <= 0 and s_val == "No":
+        if phone_clean in BLANK_SETUP_PHONES_SET and c_val <= 0:
             return "Not Started / Blank Setup ⚪"
 
         if (is_field_blank(raw_s) or str(raw_s).strip().lower() in ['blank / not synced', 'blank', 'not synced']) and (is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']) and c_val <= 0:
@@ -4546,7 +4566,7 @@ with tab_upload:
 
                                 is_s_blank = is_field_blank(raw_s)
                                 is_l_blank = is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']
-                                is_blank_setup = is_s_blank and is_l_blank and (c_val <= 0)
+                                is_blank_setup = (is_s_blank and is_l_blank and (c_val <= 0)) or (phone_clean_match in BLANK_SETUP_PHONES_SET and c_val <= 0)
 
                                 contact_val = parse_credits_num(row[col_contacts]) if col_contacts else 0.0
                                 if contact_val > 30:
@@ -4575,7 +4595,7 @@ with tab_upload:
                                         "Plan Stat Date": plan_start,
                                         "Plan End Date": plan_end,
                                         "Usage check": health_status,
-                                        "Last Sync in 7 days": "" if is_s_blank else sync_7d,
+                                        "Last Sync in 7 days": "Blank / Not Synced" if (is_s_blank or is_blank_setup) else sync_7d,
                                         "CP Usage in last 7 days": cp_7d,
                                         "Contact details fetched in last 7 days": contact_7d,
                                         "App login done in last 7 days": login_7d,
