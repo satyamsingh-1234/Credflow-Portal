@@ -89,7 +89,7 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v7" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v8" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 # Ensure all 4 standard batches are in persistent DB
                 batches_to_sync = list(clean_df['Upload_Batch'].dropna().unique())
@@ -97,7 +97,7 @@ if PERSISTENT_DB != REPO_DB:
                     b_placeholders = ','.join(['?'] * len(batches_to_sync))
                     p_conn.execute(f"DELETE FROM sales_plan_history WHERE Upload_Batch IN ({b_placeholders})", batches_to_sync)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v7') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v8') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
 
             # Sync any missing interaction records from repo DB to persistent DB
@@ -1942,7 +1942,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v7"):
+def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v8"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1964,6 +1964,10 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v7"):
             
     def _validate_row_usage_health(row):
         existing_status = str(row.get('Usage check', '')).strip()
+        # 1. If database already has an assigned standardized status, preserve it!
+        if existing_status in ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"]:
+            return existing_status
+
         if 'Not Started' in existing_status or 'Blank' in existing_status:
             return "Not Started / Blank Setup ⚪"
 
@@ -1978,8 +1982,12 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v7"):
         ct_val = parse_credits_num(row.get('Contact details fetched in last 7 days', 0))
         plan_n = str(row.get('plan name', ''))
 
-        # Check known blank setup phones or blank sync cells
-        if phone_clean in BLANK_SETUP_PHONES_SET and c_val <= 0:
+        # If customer has active sync (Yes), evaluate standard usage health - NEVER override to Not Started!
+        if s_val == "Yes":
+            return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
+
+        # Check known blank setup phones or blank sync cells (where sync is NOT active)
+        if phone_clean in BLANK_SETUP_PHONES_SET and c_val <= 0 and s_val != "Yes":
             return "Not Started / Blank Setup ⚪"
 
         if (is_field_blank(raw_s) or str(raw_s).strip().lower() in ['blank / not synced', 'blank', 'not synced']) and (is_field_blank(raw_l) or str(raw_l).strip().lower() in ['no', 'false', '0', '']) and c_val <= 0:
