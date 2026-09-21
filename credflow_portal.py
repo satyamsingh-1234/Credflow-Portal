@@ -248,7 +248,7 @@ DEFAULT_OUTREACH_TEMPLATES = {
     "email_no_usage": {
         "channel": "Email",
         "health_tier": "No Usage 🔴",
-        "subject": "[Action Required] {name} ji - Pending setup on your CredFlow ({plan_name_str}) account",
+        "subject": "[Action Required] {name} ji - Activate your CredFlow ({plan_name_str}) setup for faster collections",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Action needed to activate your automated payment collection reminders & Tally sync on CredFlow...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
@@ -326,7 +326,7 @@ Every week your automation is delayed, your team spends <b>10+ hours manually ch
     "email_low_usage": {
         "channel": "Email",
         "health_tier": "Low Usage 🟡",
-        "subject": "{name} ji - 3 uncollected payment features waiting on your {plan_name_str} account",
+        "subject": "{name} ji - Recover payments 30% faster: Unlock key features in your CredFlow ({plan_name_str}) account",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Unlock the remaining 70% of your CredFlow automation to recover outstanding payments 30% faster...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
@@ -404,12 +404,12 @@ Right now, you have active reminder channels and smart tracking features sitting
     "email_proper_usage": {
         "channel": "Email",
         "health_tier": "Proper Usage 🟢",
-        "subject": "🌟 {name} ji - Exclusive VIP Upgrade: Official Meta Verified Green Tick & AI Accountant",
+        "subject": "🌟 {name} ji - Exclusive VIP Upgrade to CredFlow Premium: Official Meta Verified Green Tick & AI Accountant",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Your business qualifies for Official Meta WhatsApp API with Verified Green Tick & AI Accountant...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
 <div style="background: linear-gradient(135deg, #0F172A 0%, #312E81 100%); padding: 24px 28px; text-align: center; border-bottom: 3px solid #7C3AED;">
-    <h1 style="color: #FFFFFF; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">CredFlow <span style="background: #7C3AED; color: #FFFFFF; font-size: 11px; padding: 4px 9px; border-radius: 6px; font-weight: 700; text-transform: uppercase; vertical-align: middle; margin-left: 8px; letter-spacing: 0.5px;">VIP Enterprise Suite</span></h1>
+    <h1 style="color: #FFFFFF; margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px;">CredFlow <span style="background: #7C3AED; color: #FFFFFF; font-size: 11px; padding: 4px 9px; border-radius: 6px; font-weight: 700; text-transform: uppercase; vertical-align: middle; margin-left: 8px; letter-spacing: 0.5px;">VIP Premium Suite</span></h1>
     <p style="color: #C7D2FE; font-size: 13px; margin: 6px 0 0 0;">Official Meta WhatsApp API & AI Accountant Integration</p>
 </div>
 
@@ -443,7 +443,7 @@ To elevate your business to 100% zero-touch billing and verified trust, we are e
     <p style="margin: 0 0 10px 0; font-weight: 700; color: #15803D; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">✅ Your Current Active Plan ({plan_name_str}):</p>
     {inc_html}
     <hr style="border: none; border-top: 1px dashed #CBD5E1; margin: 12px 0;">
-    <p style="margin: 0 0 10px 0; font-weight: 700; color: #7C3AED; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🚀 Next-Level Enterprise Capabilities Unlocked on Upgrade:</p>
+    <p style="margin: 0 0 10px 0; font-weight: 700; color: #7C3AED; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🚀 Next-Level Premium Capabilities Unlocked on Upgrade:</p>
     {miss_html}
 </div>
 
@@ -464,8 +464,8 @@ To elevate your business to 100% zero-touch billing and verified trust, we are e
 <table width="100%" cellpadding="0" cellspacing="0">
     <tr>
         <td style="color: #64748B; font-size: 12px; line-height: 1.6;">
-            📞 Priority Enterprise Desk: <b>+91 72177 16636</b> | ✉️ Executive Email: <b>support@credflow.in</b><br>
-            Regards,<br><b style="color: #1E293B; font-size: 13px;">CredFlow Enterprise Solutions Group</b>
+            📞 Priority Premium Desk: <b>+91 72177 16636</b> | ✉️ Executive Email: <b>support@credflow.in</b><br>
+            Regards,<br><b style="color: #1E293B; font-size: 13px;">CredFlow Premium Solutions Group</b>
         </td>
     </tr>
 </table>
@@ -538,7 +538,7 @@ Heartiest Congratulations! Aapka CredFlow *{plan_name}* par active usage dekh ka
 
 {inc_sec}{upg_sec}
 
-🔥 *Exclusive VIP Enterprise Upgrade (Special Priority Access):*
+🔥 *Exclusive VIP Premium Upgrade (Special Priority Access):*
 Ab aap apne business ko **Official Meta WhatsApp API (Verified Green Tick)** aur **AI Accountant (Auto OCR Voucher Posting)** par upgrade karke billing aur collections ko *100% Zero-Touch Automate* kar sakte hain!
 
 👉 **Agar aap live demo aur discounted priority pricing dekhna chahte hain, toh bas "UPGRADE" likh kar reply karein.**
@@ -549,7 +549,7 @@ Quick Links:
 🔑 *CredFlow Portal*: https://app.credflow.in
 
 Warm Regards,
-*Enterprise Solutions Group | CredFlow*
+*Premium Solutions Group | CredFlow*
 📞 +91 72177 16636 | support@credflow.in"""
     },
     "interakt_no_usage": {
@@ -969,10 +969,10 @@ def resolve_features_for_plan(plan_name_str):
     return [x for x in features if not (x in seen or seen.add(x))]
 
 def eval_plan_credits_and_score(plan_name, c_val):
-    """Evaluates CP Usage label and points based on Plan Tier (Lite/Pro/Enterprise)"""
+    """Evaluates CP Usage label and points based on Plan Tier (Lite/Pro/Premium)"""
     pn = str(plan_name).upper()
-    if any(k in pn for k in ['ENTERPRISE', 'ADVANCED', 'AI ACCOUNTANT', 'BVP', 'PREMIUM']):
-        tier = 'ENTERPRISE'
+    if any(k in pn for k in ['PREMIUM', 'ENTERPRISE', 'ADVANCED', 'AI ACCOUNTANT', 'BVP']):
+        tier = 'PREMIUM'
     elif any(k in pn for k in ['SAVER', 'PRO', 'GROWTH', 'STANDARD']):
         tier = 'PRO'
     else:
@@ -996,7 +996,7 @@ def eval_plan_credits_and_score(plan_name, c_val):
             return "less than 200", 0
         else:
             return "None", 0
-    else: # ENTERPRISE / PREMIUM / BVP
+    else: # PREMIUM / BVP / ADVANCED
         if c_val > 1000:
             return "More than 1000", 3
         elif c_val >= 500:
@@ -1152,7 +1152,7 @@ def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0):
     # 3-Parameter Active Points Matrix:
     # 1. App Login: Yes = +2 Pts, No = 0 Pts
     # 2. Last Sync: Yes = +1 Pt, No = 0 Pts
-    # 3. CP Usage: Lite (>100: +3, 30-100: +2, <30: 0), Pro (>500: +3, 200-500: +2, <200: 0), Enterprise (>1000: +3, 500-1000: +2, <500: 0)
+    # 3. CP Usage: Lite (>100: +3, 30-100: +2, <30: 0), Pro (>500: +3, 200-500: +2, <200: 0), Premium (>1000: +3, 500-1000: +2, <500: 0)
     # 4. Contacts (if present): >30: +2 Pts, 11-30: +1 Pt
     pts = 0
     if login_yes: pts += 2
@@ -1785,7 +1785,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "[Action Required] {name} ji - Pending setup on your CredFlow ({plan_name_str}) account")
+                sub_template = tpl_data.get("subject", "[Action Required] {name} ji - Activate your CredFlow ({plan_name_str}) setup for faster collections")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
@@ -1809,7 +1809,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "{name} ji - 3 uncollected payment features waiting on your {plan_name_str} account")
+                sub_template = tpl_data.get("subject", "{name} ji - Recover payments 30% faster: Unlock key features in your CredFlow ({plan_name_str}) account")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
@@ -1833,7 +1833,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "🌟 {name} ji - Exclusive VIP Upgrade: Official Meta Verified Green Tick & AI Accountant")
+                sub_template = tpl_data.get("subject", "🌟 {name} ji - Exclusive VIP Upgrade to CredFlow Premium: Official Meta Verified Green Tick & AI Accountant")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
@@ -2331,7 +2331,7 @@ def render_dashboard(df_sales, prefix):
         | :--- | :--- | :---: | :---: |
         | **1. App Login** | `Yes` (Logged in within 7 days)<br>`No` / `None` | **+2 Points**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | **2. Last Sync** | `Yes` (Synced within 7 days)<br>`No` / `None` | **+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Enterprise / BVP / Premium Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+        | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Premium / BVP Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
         | *(4. Contact Details)* | *(Currently deferred / optional - does not penalize score)* | *N/A* | *Excluded from score calculation* |
 
         ---
@@ -2399,7 +2399,7 @@ def render_crm(cx_df):
             with tp3:
                 test_pwa_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_pwa_health")
             with tp4:
-                test_pwa_plan = st.text_input("Plan Name", value="Enterprise Plan", key="test_pwa_plan")
+                test_pwa_plan = st.text_input("Plan Name", value="Premium Plan", key="test_pwa_plan")
                 
             if st.button("🚀 Send Test WhatsApp via Personal Number", type="primary", key="btn_test_pwa", use_container_width=True):
                 if not test_pwa_phone or len(test_pwa_phone.strip()) < 10:
@@ -2455,7 +2455,7 @@ def render_crm(cx_df):
             with tec3:
                 test_email_health = st.selectbox("Usage Health Category", ["No Usage 🔴", "Low Usage 🟡", "Proper Usage 🟢"], key="test_email_health")
             with tec4:
-                test_email_plan = st.text_input("Plan Name", value="Enterprise Plan", key="test_email_plan")
+                test_email_plan = st.text_input("Plan Name", value="Premium Plan", key="test_email_plan")
                 
             if st.button("🚀 Send Test Email", type="primary", use_container_width=True):
                 if not test_email_addr or "@" not in test_email_addr:
