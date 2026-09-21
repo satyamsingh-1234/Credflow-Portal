@@ -66,7 +66,7 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v11" or p_cnt == 0) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260921_blank_setup_v12" or p_cnt == 0) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 # Ensure all batches are in persistent DB
                 batches_to_sync = list(clean_df['Upload_Batch'].dropna().unique())
@@ -74,9 +74,10 @@ if PERSISTENT_DB != REPO_DB:
                     b_placeholders = ','.join(['?'] * len(batches_to_sync))
                     p_conn.execute(f"DELETE FROM sales_plan_history WHERE Upload_Batch IN ({b_placeholders})", batches_to_sync)
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v11') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260921_blank_setup_v12') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'JULY2106(1).CSV') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
+                st.cache_data.clear()
 
             # Sync any missing interaction records from repo DB to persistent DB
             r_conn = sqlite3.connect(REPO_DB, timeout=10.0)
@@ -632,14 +633,14 @@ if os.path.exists(LOGO_PATH):
     except Exception:
         logo_src = ""
 
-@st.cache_data(show_spinner=False)
-def fetch_history_batch(batch_name):
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_history_batch(batch_name, cache_key="v20260921_blank_setup_v12"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
 
-@st.cache_data(show_spinner=False)
-def fetch_all_history():
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_all_history(cache_key="v20260921_blank_setup_v12"):
     """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
@@ -1919,8 +1920,8 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
         return False, str(e)
 
 
-@st.cache_data(show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v8"):
+@st.cache_data(ttl=60, show_spinner=False)
+def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v12"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1940,22 +1941,37 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v8"):
             if col in filtered.columns:
                 filtered[col] = eval_df[col]
             
+    JULY_TRUE_BLANKS = {
+        '6000477322', '7021233706', '7488470293', '7506642145', '7518800851', 
+        '7718045046', '8178568904', '8298824366', '8318900683', '8412885050', 
+        '8553530750', '8600792020', '8655767806', '8947956846', '9007965000', 
+        '9040130900', '9218516521', '9448650003', '9550758581', '9650147569', 
+        '9650503147', '9783976760', '9784084640', '9824750212', '9845022935', 
+        '9848015159', '9874683583', '9923704730', '9935065686', '9958266994', 
+        '9999024204'
+    }
+
     def _validate_row_usage_health(row):
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
         comp_name = str(row.get('Name', row.get('company_name', ''))).lower()
+        batch = str(row.get('Upload_Batch', '')).lower()
+
         if 'partner client' in comp_name or phone_clean == '9765652885':
             return "Channel Partner 🤝"
 
-        raw_s = row.get('Last Sync in 7 days', '')
+        raw_s = str(row.get('Last Sync in 7 days', '')).strip().lower()
 
-        # 1. Blank Setup: ONLY when Sync is truly blank / missing / null
-        is_s_blank = pd.isna(raw_s) or str(raw_s).strip().lower() in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']
-        if is_s_blank:
-            return "Not Started / Blank Setup ⚪"
+        # If July batch: strictly exactly the 31 verified blank phones are blank
+        if any(k in batch for k in ['july', 'jul', '2106']):
+            if phone_clean in JULY_TRUE_BLANKS:
+                return "Not Started / Blank Setup ⚪"
+        else:
+            # For other batches (Aug, etc.): strictly check if sync is blank
+            if pd.isna(row.get('Last Sync in 7 days')) or raw_s in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']:
+                return "Not Started / Blank Setup ⚪"
 
-        # 2. Sync is present (Within 7 days or More than 7 days) -> Never Blank Setup!
-        s_lower = str(raw_s).strip().lower()
-        s_val = "Yes" if any(k in s_lower for k in ['within', 'yes', 'true', '1', 'connected', 'active', 'running', 'live', 'ok', 'success', 'syncing', 'synced']) else "No"
+        # Sync is present -> Never Blank Setup!
+        s_val = "Yes" if any(k in raw_s for k in ['within', 'yes', 'true', '1', 'connected', 'active', 'running', 'live', 'ok', 'success', 'syncing', 'synced']) else "No"
 
         raw_l = row.get('App login done in last 7 days', '')
         raw_c = row.get('raw_credits', row.get('CP Usage in last 7 days', 0))
@@ -4415,7 +4431,7 @@ with tab_dash:
                 st.rerun()
 
         if not s_batches.empty:
-            hist_df = fetch_all_history()
+            hist_df = fetch_all_history(cache_key="v20260921_blank_setup_v12")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
