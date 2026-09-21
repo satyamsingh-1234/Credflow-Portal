@@ -3002,24 +3002,31 @@ def render_crm(cx_df):
         editor_state = st.session_state.get(editor_key, {})
         user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
 
-        if user_edited_rows:
-            diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
-            diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
-            diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
-            diff_status = ui_display_df['Call Status'].fillna('').astype(str).str.strip() != edited_df['Call Status'].fillna('').astype(str).str.strip()
-            diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-            diff_issue = ui_display_df['Issue Type'].fillna('').astype(str).str.strip() != edited_df['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in ui_display_df.columns and 'Issue Type' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-            diff_poa = ui_display_df['Plan of Action'].fillna('').astype(str).str.strip() != edited_df['Plan of Action'].fillna('').astype(str).str.strip() if 'Plan of Action' in ui_display_df.columns and 'Plan of Action' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-            diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
-            diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
+        diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
+        diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
+        diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
+        diff_status = ui_display_df['Call Status'].fillna('').astype(str).str.strip() != edited_df['Call Status'].fillna('').astype(str).str.strip()
+        diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_issue = ui_display_df['Issue Type'].fillna('').astype(str).str.strip() != edited_df['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in ui_display_df.columns and 'Issue Type' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_poa = ui_display_df['Plan of Action'].fillna('').astype(str).str.strip() != edited_df['Plan of Action'].fillna('').astype(str).str.strip() if 'Plan of Action' in ui_display_df.columns and 'Plan of Action' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
+        diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
 
-            f_ui = ui_display_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
-            f_ed = edited_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
-            diff_follow = f_ui != f_ed
+        f_ui = ui_display_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
+        f_ed = edited_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
+        diff_follow = f_ui != f_ed
 
-            diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
+        diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
 
-            edited_indices = [idx for idx in user_edited_rows.keys() if idx in edited_df.index and diff.loc[idx]]
+        if bool(user_edited_rows) or diff.any():
+            user_keys_int = []
+            for k in user_edited_rows.keys():
+                try:
+                    user_keys_int.append(int(k))
+                except (ValueError, TypeError):
+                    pass
+            diff_indices = [idx for idx in diff[diff].index if idx in edited_df.index]
+            edited_indices = list(set([idx for idx in user_keys_int if idx in edited_df.index] + diff_indices))
             if edited_indices:
                 changed_rows = edited_df.loc[edited_indices]
                 for idx, row in changed_rows.iterrows():
