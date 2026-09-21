@@ -1956,10 +1956,13 @@ def prepare_eval_df(df_sales, cache_key="v20260921_blank_setup_v12"):
         comp_name = str(row.get('Name', row.get('company_name', ''))).lower()
         batch = str(row.get('Upload_Batch', '')).lower()
 
-        if 'partner client' in comp_name or phone_clean == '9765652885':
-            return "Channel Partner 🤝"
-
         raw_s = str(row.get('Last Sync in 7 days', '')).strip().lower()
+
+        if 'partner client' in comp_name or phone_clean == '9765652885':
+            if pd.isna(row.get('Last Sync in 7 days')) or raw_s in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']:
+                return "Not Started / Blank Setup ⚪"
+            else:
+                return "No Usage 🔴"
 
         # If July batch: strictly exactly the 31 verified blank phones are blank
         if any(k in batch for k in ['july', 'jul', '2106']):
@@ -2113,7 +2116,7 @@ def render_dashboard(df_sales, prefix):
     
     temp_plans = df_sales['plan name'].replace("", pd.NA).ffill()
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
-    usage_opts = ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "Channel Partner 🤝", "No Data (Not Uploaded)"]
+    usage_opts = ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "No Data (Not Uploaded)"]
     
     batches_in_data = []
     if 'Upload_Batch' in df_sales.columns:
@@ -2309,12 +2312,11 @@ def render_dashboard(df_sales, prefix):
     dash_df = eval_df.drop_duplicates(subset=['phone'], keep='last').copy()
 
     # Usage counts
-    channel_partner = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)])
     not_started = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
-    no_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~dash_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)])
+    no_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
     low_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
     proper_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
-    no_data = max(0, unique_cx - not_started - no_usage - low_usage - proper_usage - channel_partner)
+    no_data = max(0, unique_cx - not_started - no_usage - low_usage - proper_usage)
 
     dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
@@ -2326,13 +2328,12 @@ def render_dashboard(df_sales, prefix):
     email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
 
     # ── ROW 1: KPI Cards ──
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("👥 Total Customers", unique_cx)
     k2.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="normal")
     k3.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
     k4.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
     k5.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
-    k6.metric("🤝 Channel Partner", channel_partner, delta=f"{round(channel_partner/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
 
     # ── ROW 2: Outreach KPIs ──
     o1, o2, o3, o4 = st.columns(4)
@@ -2348,8 +2349,8 @@ def render_dashboard(df_sales, prefix):
 
     with ch1:
         usage_data = pd.DataFrame({
-            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪', 'Channel Partner 🤝', 'No Data'],
-            'Count': [proper_usage, low_usage, no_usage, not_started, channel_partner, no_data]
+            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪', 'No Data'],
+            'Count': [proper_usage, low_usage, no_usage, not_started, no_data]
         })
         usage_data = usage_data[usage_data['Count'] > 0]
         fig_usage = px.pie(
@@ -2361,7 +2362,6 @@ def render_dashboard(df_sales, prefix):
                 'Low Usage 🟡': '#F59E0B',
                 'No Usage 🔴': '#EF4444',
                 'Not Started / Blank ⚪': '#94A3B8',
-                'Channel Partner 🤝': '#8B5CF6',
                 'No Data': '#D1D5DB'
             },
             hole=0.45
@@ -4602,7 +4602,7 @@ with tab_upload:
                                     contact_7d = "None"
 
                                 if 'partner client' in cx_name.lower() or phone_clean_match == '9765652885':
-                                    health_status = "Channel Partner 🤝"
+                                    health_status = "Not Started / Blank Setup ⚪" if is_s_blank else "No Usage 🔴"
                                 elif is_s_blank:
                                     health_status = "Not Started / Blank Setup ⚪"
                                 else:
