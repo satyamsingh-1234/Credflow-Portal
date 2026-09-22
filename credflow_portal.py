@@ -308,7 +308,7 @@ DEFAULT_OUTREACH_TEMPLATES = {
     "email_no_usage": {
         "channel": "Email",
         "health_tier": "No Usage 🔴",
-        "subject": "[Action Required] {name} ji - Activate your CredFlow ({plan_name_str}) setup for faster collections",
+        "subject": "Quick question regarding your CredFlow setup, {name} ji",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Action needed to activate your automated payment collection reminders & Tally sync on CredFlow...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
@@ -386,7 +386,7 @@ Every week your automation is delayed, your team spends <b>10+ hours manually ch
     "email_low_usage": {
         "channel": "Email",
         "health_tier": "Low Usage 🟡",
-        "subject": "{name} ji - Recover payments 30% faster: Unlock key features in your CredFlow ({plan_name_str}) account",
+        "subject": "{name} ji - 2 quick settings to speed up your payment collections",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Unlock the remaining 70% of your CredFlow automation to recover outstanding payments 30% faster...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
@@ -464,7 +464,7 @@ Right now, you have active reminder channels and smart tracking features sitting
     "email_proper_usage": {
         "channel": "Email",
         "health_tier": "Proper Usage 🟢",
-        "subject": "🌟 {name} ji - Exclusive VIP Upgrade to CredFlow Premium: Official Meta Verified Green Tick & AI Accountant",
+        "subject": "{name} ji - Priority Invitation: Official Meta Verified Green Tick for your business",
         "body": """<div style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Your business qualifies for Official Meta WhatsApp API with Verified Green Tick & AI Accountant...</div>
 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0F172A; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; background-color: #FFFFFF; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08);">
 <!-- Header -->
@@ -1870,7 +1870,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "[Action Required] {name} ji - Activate your CredFlow ({plan_name_str}) setup for faster collections")
+                sub_template = tpl_data.get("subject", "Quick question regarding your CredFlow setup, {name} ji")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
@@ -1894,7 +1894,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "{name} ji - Recover payments 30% faster: Unlock key features in your CredFlow ({plan_name_str}) account")
+                sub_template = tpl_data.get("subject", "{name} ji - 2 quick settings to speed up your payment collections")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
@@ -1918,7 +1918,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
                 issue_tech = f"mailto:support@credflow.in?subject=Tech%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20a%20Technical%20Issue."
                 issue_other = f"mailto:support@credflow.in?subject=Other%20Issue%20-%20{name.replace(' ', '%20')}&body=I%20am%20facing%20an%20Issue."
 
-                sub_template = tpl_data.get("subject", "🌟 {name} ji - Exclusive VIP Upgrade to CredFlow Premium: Official Meta Verified Green Tick & AI Accountant")
+                sub_template = tpl_data.get("subject", "{name} ji - Priority Invitation: Official Meta Verified Green Tick for your business")
                 body_template = tpl_data.get("body", "")
 
                 msg['Subject'] = fill_template_vars(sub_template, {"name": name, "plan_name_str": plan_name_str})
