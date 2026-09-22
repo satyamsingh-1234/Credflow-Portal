@@ -83,11 +83,11 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260922_option1_v1" or p_cnt > 3224) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260922_453_v1" or p_cnt > 3224) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 p_conn.execute("DELETE FROM sales_plan_history")
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260922_option1_v1') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260922_453_v1') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'AUG2209.CSV') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
                 st.cache_data.clear()
@@ -676,13 +676,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20260922_option1_v1"):
+def fetch_history_batch(batch_name, cache_key="v20260922_453_v1"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20260922_option1_v1"):
+def fetch_all_history(cache_key="v20260922_453_v1"):
     """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
@@ -1963,7 +1963,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260922_option1_v1"):
+def prepare_eval_df(df_sales, cache_key="v20260922_453_v1"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -4484,7 +4484,7 @@ with tab_dash:
                 st.rerun()
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20260922_option1_v1")
+            hist_df = fetch_all_history(cache_key="v20260922_453_v1")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
