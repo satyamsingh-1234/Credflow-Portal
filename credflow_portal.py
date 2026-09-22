@@ -30,6 +30,19 @@ REPO_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "credflow_hist
 
 # BLANK_SETUP_PHONES removed: blank setup strictly evaluated from sync column only
 
+# ── KNOWN CHANNEL PARTNERS GLOBAL REGISTRY ──
+DEFAULT_CHANNEL_PARTNERS = [
+    ('8412885050', 'Anup', 'Assect Tally', 'Channel Partner Lead'),
+    ('7518800851', 'Hari Yamaha', 'AMS Solutions', 'Channel Partner Lead'),
+    ('9650147569', 'Neeraj Singh', 'Vivek Bambi', 'Partner Sales Exec: co'),
+    ('8178568904', 'TURBO WIRE / Lakshay Arora', 'Channel Partner Lead', 'Notes: Channel Partner Lead'),
+    ('8318900683', 'AMS Solutions', 'Ams Solutions', 'Channel Partner Lead'),
+    ('6359448888', 'AAR TECH INDUSTRIES', 'Aman Kumar Sahu', 'Channel Partner Lead'),
+    ('8985899161', 'gayatriChilliestrades', 'AtTally Sofper', 'Partner Sales Exec: channel'),
+    ('9443171424', 'Sundharakrishnan Jayaraman', 'Active Partner', 'Status: Active Partner')
+]
+CHANNEL_PARTNER_PHONES = {p[0] for p in DEFAULT_CHANNEL_PARTNERS}
+
 # Use /tmp on Linux/Streamlit Cloud to preserve live web user edits across Git redeployments
 TMP_DIR = "/tmp" if os.name != 'nt' and os.path.exists("/tmp") else None
 PERSISTENT_DB = os.path.join(TMP_DIR, "credflow_history.db") if TMP_DIR else REPO_DB
@@ -57,6 +70,9 @@ if PERSISTENT_DB != REPO_DB:
             cur = p_conn.cursor()
             cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
             cur.execute("CREATE TABLE IF NOT EXISTS known_channel_partners (phone TEXT PRIMARY KEY, name TEXT, partner_name TEXT, tag_source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            for cp in DEFAULT_CHANNEL_PARTNERS:
+                cur.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
+            p_conn.commit()
             cur.execute("SELECT COUNT(*) FROM sales_plan_history")
             p_cnt = cur.fetchone()[0]
 
@@ -131,6 +147,35 @@ try:
     conn.commit()
 except Exception:
     pass
+
+# Channel Partner table setup & persistence
+conn.execute('''CREATE TABLE IF NOT EXISTS known_channel_partners (
+    phone TEXT PRIMARY KEY,
+    name TEXT,
+    partner_name TEXT,
+    tag_source TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)''')
+for cp in DEFAULT_CHANNEL_PARTNERS:
+    try:
+        conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
+    except Exception:
+        pass
+conn.commit()
+
+def load_channel_partner_phones():
+    global CHANNEL_PARTNER_PHONES
+    try:
+        rows = conn.execute("SELECT phone FROM known_channel_partners").fetchall()
+        for r in rows:
+            if r[0]:
+                p_clean = str(r[0]).replace('.0', '').replace('+91', '').strip()
+                if p_clean:
+                    CHANNEL_PARTNER_PHONES.add(p_clean)
+    except Exception:
+        pass
+
+load_channel_partner_phones()
 
 # User-defined Issue Types (editable dropdown options)
 conn.execute('''CREATE TABLE IF NOT EXISTS issue_types (
@@ -1948,18 +1993,8 @@ def prepare_eval_df(df_sales, cache_key="v20260921_channel_partners_v1"):
         '9999024204'
     }
 
-    CHANNEL_PARTNER_PHONES = {
-        '8412885050', '7518800851', '9650147569', '8178568904', 
-        '8318900683', '6359448888', '8985899161', '9443171424'
-    }
-    try:
-        with sqlite3.connect(DB_PATH, timeout=5.0) as _cp_c:
-            _cp_rows = _cp_c.execute("SELECT phone FROM known_channel_partners").fetchall()
-            for _r in _cp_rows:
-                if _r[0]:
-                    CHANNEL_PARTNER_PHONES.add(str(_r[0]).strip())
-    except Exception:
-        pass
+    global CHANNEL_PARTNER_PHONES
+    load_channel_partner_phones()
 
     def _validate_row_usage_health(row):
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
@@ -4624,7 +4659,7 @@ with tab_upload:
                                     'partner' in str(_get_row_val(row, [c])).lower()
                                     for c in ['channel partner name', 'channel partner', 'partner', 'contact source', 'notes', 'lead tagging', 'sub stage']
                                 )
-                                if phone_clean_match in CHANNEL_PARTNER_PHONES or 'partner client' in cx_name.lower() or has_partner_col:
+                                if phone_clean_match in CHANNEL_PARTNER_PHONES or has_partner_col:
                                     health_status = "Channel Partner 🤝"
                                     try:
                                         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, tag_source) VALUES (?, ?, ?)", (phone_clean_match, cx_name, "Auto-detected from file upload"))
@@ -4632,6 +4667,11 @@ with tab_upload:
                                         CHANNEL_PARTNER_PHONES.add(phone_clean_match)
                                     except Exception:
                                         pass
+                                elif 'partner client' in cx_name.lower() or phone_clean_match == '9765652885':
+                                    if is_s_blank:
+                                        health_status = "Not Started / Blank Setup ⚪"
+                                    else:
+                                        health_status = "No Usage 🔴"
                                 elif is_s_blank:
                                     health_status = "Not Started / Blank Setup ⚪"
                                 else:
