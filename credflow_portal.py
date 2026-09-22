@@ -83,11 +83,11 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260922_453_v1" or p_cnt > 3224) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260922_blank3_v1" or p_cnt > 3224) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 p_conn.execute("DELETE FROM sales_plan_history")
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260922_453_v1') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260922_blank3_v1') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'AUG2209.CSV') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
                 st.cache_data.clear()
@@ -676,13 +676,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20260922_453_v1"):
+def fetch_history_batch(batch_name, cache_key="v20260922_blank3_v1"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20260922_453_v1"):
+def fetch_all_history(cache_key="v20260922_blank3_v1"):
     """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
@@ -1200,6 +1200,21 @@ def is_field_blank(val):
         return True
     s = str(val).strip().lower()
     return not s or s in ['nan', 'none', 'null', 'nil', '', '-', 'n/a', 'blank']
+
+
+def is_all_three_blank(sync_val, login_val, cp_val):
+    """User strict rule: Blank Setup ONLY when ALL THREE (sync, login, cp) are blank / no activity."""
+    s = str(sync_val).strip().lower() if sync_val is not None and not pd.isna(sync_val) else ""
+    s_blank = not s or s in ['nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']
+    
+    l = str(login_val).strip().lower() if login_val is not None and not pd.isna(login_val) else ""
+    l_blank = not l or l in ['nan', 'none', 'null', 'nil', '-', 'blank', 'n/a', 'no']
+    
+    c_num = parse_credits_num(cp_val)
+    c_str = str(cp_val).strip().lower() if cp_val is not None and not pd.isna(cp_val) else ""
+    c_blank = (c_num == 0) or not c_str or c_str in ['nan', 'none', '0', '0.0', 'null']
+    
+    return s_blank and l_blank and c_blank
 
 
 def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0, is_blank_setup=False):
@@ -1963,7 +1978,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260922_453_v1"):
+def prepare_eval_df(df_sales, cache_key="v20260922_blank3_v1"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -1999,36 +2014,26 @@ def prepare_eval_df(df_sales, cache_key="v20260922_453_v1"):
     def _validate_row_usage_health(row):
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
         comp_name = str(row.get('Name', row.get('company_name', ''))).lower()
-        batch = str(row.get('Upload_Batch', '')).lower()
 
         if phone_clean in CHANNEL_PARTNER_PHONES:
             return "Channel Partner 🤝"
 
-        raw_s = str(row.get('Last Sync in 7 days', '')).strip().lower()
-
         if 'partner client' in comp_name or phone_clean == '9765652885':
-            if pd.isna(row.get('Last Sync in 7 days')) or raw_s in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']:
-                return "Not Started / Blank Setup ⚪"
-            else:
-                return "No Usage 🔴"
+            return "No Usage 🔴"
 
-        # If July batch: strictly exactly the 31 verified blank phones are blank
-        if any(k in batch for k in ['july', 'jul', '2106']):
-            if phone_clean in JULY_TRUE_BLANKS:
-                return "Not Started / Blank Setup ⚪"
-        else:
-            # For other batches (Aug, etc.): strictly check if sync is blank
-            if pd.isna(row.get('Last Sync in 7 days')) or raw_s in ['', 'nan', 'none', 'null', 'nil', '-', 'blank', 'not synced', 'blank / not synced', 'n/a']:
-                return "Not Started / Blank Setup ⚪"
+        # User's strict rule: Blank Setup ONLY when ALL THREE (sync, login, cp) are blank / no activity
+        sync_raw = row.get('Last Sync in 7 days')
+        login_raw = row.get('App login done in last 7 days')
+        cp_raw = row.get('raw_credits', row.get('CP Usage in last 7 days', 0))
 
-        # Sync is present -> Never Blank Setup!
+        if is_all_three_blank(sync_raw, login_raw, cp_raw):
+            return "Not Started / Blank Setup ⚪"
+
+        raw_s = str(sync_raw or '').strip().lower()
         s_val = "Yes" if any(k in raw_s for k in ['within', 'yes', 'true', '1', 'connected', 'active', 'running', 'live', 'ok', 'success', 'syncing', 'synced']) else "No"
 
-        raw_l = row.get('App login done in last 7 days', '')
-        raw_c = row.get('raw_credits', row.get('CP Usage in last 7 days', 0))
-
-        c_val = parse_credits_num(raw_c)
-        l_val = parse_login_status(raw_l)
+        c_val = parse_credits_num(cp_raw)
+        l_val = parse_login_status(login_raw)
         ct_val = parse_credits_num(row.get('Contact details fetched in last 7 days', 0))
         plan_n = str(row.get('plan name', ''))
 
@@ -2036,7 +2041,7 @@ def prepare_eval_df(df_sales, cache_key="v20260922_453_v1"):
         if existing_status in ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"]:
             return existing_status
 
-        return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val)
+        return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val, is_blank_setup=False)
 
     eval_df['Usage check'] = eval_df.apply(_validate_row_usage_health, axis=1)
     filtered['Usage check'] = eval_df['Usage check']
@@ -4484,7 +4489,7 @@ with tab_dash:
                 st.rerun()
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20260922_453_v1")
+            hist_df = fetch_all_history(cache_key="v20260922_blank3_v1")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
@@ -4668,11 +4673,8 @@ with tab_upload:
                                     except Exception:
                                         pass
                                 elif 'partner client' in cx_name.lower() or phone_clean_match == '9765652885':
-                                    if is_s_blank:
-                                        health_status = "Not Started / Blank Setup ⚪"
-                                    else:
-                                        health_status = "No Usage 🔴"
-                                elif is_s_blank:
+                                    health_status = "No Usage 🔴"
+                                elif is_all_three_blank(sync_7d, login_7d, cp_7d):
                                     health_status = "Not Started / Blank Setup ⚪"
                                 else:
                                     health_status = compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val, is_blank_setup=False)
