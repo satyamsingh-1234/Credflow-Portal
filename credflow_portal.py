@@ -83,12 +83,12 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260922_aug355_v1" or p_cnt > 3235) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20260923_aug355_final" or p_cnt > 3235) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 p_conn.execute("DELETE FROM sales_plan_history")
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260922_aug355_v1') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'AUG2209.CSV') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260923_aug355_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2309.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
                 st.cache_data.clear()
 
@@ -676,13 +676,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20260922_aug355_v1"):
+def fetch_history_batch(batch_name, cache_key="v20260923_aug355_final"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20260922_aug355_v1"):
+def fetch_all_history(cache_key="v20260923_aug355_final"):
     """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
@@ -1978,7 +1978,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260922_aug355_v1"):
+def prepare_eval_df(df_sales, cache_key="v20260923_aug355_final"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -4462,6 +4462,15 @@ if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
+if st.sidebar.button("🔁 Reset Master Data (355 Aug + 379 July = 734)", use_container_width=True, help="Force reset database to official master: 355 August + 379 July customers"):
+    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+    if os.path.exists(csv_master):
+        clean_df = pd.read_csv(csv_master, compression='gzip')
+        clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+        st.cache_data.clear()
+        st.sidebar.success("✅ Database restored to 355 Aug + 379 July!")
+        st.rerun()
+
 
 tab_dash, tab_weekly, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
     "📊 Main Dashboard & CRM",
@@ -4480,7 +4489,12 @@ with tab_dash:
         
         # Check if database is empty; only seed if 0 rows exist
         cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0] if not s_batches.empty else 0
-        if cur_row_cnt == 0:
+        aug_cnt = 0
+        try:
+            aug_cnt = pd.read_sql("SELECT COUNT(DISTINCT phone) FROM sales_plan_history WHERE LOWER(Upload_Batch) LIKE '%aug%'", conn).iloc[0, 0]
+        except Exception:
+            pass
+        if cur_row_cnt == 0 or aug_cnt < 355:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
@@ -4489,7 +4503,7 @@ with tab_dash:
                 st.rerun()
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20260922_aug355_v1")
+            hist_df = fetch_all_history(cache_key="v20260923_aug355_final")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
