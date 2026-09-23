@@ -2334,9 +2334,13 @@ def render_dashboard(df_sales, prefix):
         
     dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
     unique_cx = len(dash_df)
+    cp_mask_view = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
+    channel_partner = int(cp_mask_view.sum())
+    trackable_cx = unique_cx - channel_partner
+
     st.markdown(f"""
     <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 16px; margin: 10px 0 16px 0; color: #166534; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
-        <span>👥 <b>Showing {unique_cx} Customers Across Cohorts</b></span>
+        <span>👥 <b>Showing {trackable_cx} Trackable Customers</b> <span style="font-weight: 400; color: #4B5563; font-size: 13px;">(Total {unique_cx} records, incl. {channel_partner} Channel Partners)</span></span>
         <span style="background: #10B981; color: white; border-radius: 12px; padding: 3px 12px; font-size: 12px; font-weight: 700;">Total {len(filtered)} Rows in View</span>
     </div>
     """, unsafe_allow_html=True)
@@ -2365,19 +2369,24 @@ def render_dashboard(df_sales, prefix):
 
     # Compute per-customer stats from eval_df (one record per phone per cohort batch)
     dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
+    cp_mask = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
+    channel_partner = int(cp_mask.sum())
 
-    # Usage counts
-    channel_partner = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)])
-    not_started = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
-    no_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~dash_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)])
-    low_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
-    proper_usage = len(dash_df[dash_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
-    no_data = max(0, unique_cx - not_started - no_usage - low_usage - proper_usage - channel_partner)
+    # Exclude Channel Partners from usage health tracking as requested
+    trackable_df = dash_df[~cp_mask].copy()
+    trackable_cx = len(trackable_df)
+
+    not_started = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+    no_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+    low_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
+    proper_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
+    no_data = max(0, trackable_cx - not_started - no_usage - low_usage - proper_usage)
 
     dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+    trackable_df['phone'] = trackable_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
-    dash_df = dash_df.drop(columns=[c for c in db_cols_dash if c in dash_df.columns], errors='ignore')
-    dash_merged = pd.merge(dash_df, interactions_dash, on='phone', how='left')
+    trackable_df = trackable_df.drop(columns=[c for c in db_cols_dash if c in trackable_df.columns], errors='ignore')
+    dash_merged = pd.merge(trackable_df, interactions_dash, on='phone', how='left')
 
     wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
     free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
@@ -2385,41 +2394,42 @@ def render_dashboard(df_sales, prefix):
 
     # ── ROW 1: KPI Cards ──
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.metric("👥 Total Customers", unique_cx)
-    k2.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="normal")
-    k3.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
-    k4.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
-    k5.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
-    k6.metric("🤝 Channel Partner", channel_partner, delta=f"{round(channel_partner/unique_cx*100)}%" if unique_cx else "0%", delta_color="off")
+    k1.metric("👥 Trackable Customers", trackable_cx, delta=f"Excl. {channel_partner} CP" if channel_partner else None, delta_color="off", help=f"Total: {unique_cx} records (including {channel_partner} Channel Partners)")
+    k2.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
+    k3.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+    k4.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
+    k5.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+    k6.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
 
     # ── ROW 2: Outreach KPIs ──
     o1, o2, o3, o4 = st.columns(4)
-    o1.metric("📩 WA API Sent", wa_sent_count, delta=f"{round(wa_sent_count/unique_cx*100)}%" if unique_cx else "0%")
-    o2.metric("💬 Free WA Sent", free_wa_count, delta=f"{round(free_wa_count/unique_cx*100)}%" if unique_cx else "0%")
-    o3.metric("📧 Emails Sent", email_sent_count, delta=f"{round(email_sent_count/unique_cx*100)}%" if unique_cx else "0%")
+    o1.metric("📩 WA API Sent", wa_sent_count, delta=f"{round(wa_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
+    o2.metric("💬 Free WA Sent", free_wa_count, delta=f"{round(free_wa_count/trackable_cx*100)}%" if trackable_cx else "0%")
+    o3.metric("📧 Emails Sent", email_sent_count, delta=f"{round(email_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
     total_reached = len(dash_merged[(dash_merged['wa_sent'].fillna(0).astype(bool)) | (dash_merged['free_wa_sent'].fillna(0).astype(bool)) | (dash_merged['email_sent'].fillna(0).astype(bool))])
-    not_reached = unique_cx - total_reached
-    o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/unique_cx*100)}%" if unique_cx else "0%", delta_color="inverse")
+    not_reached = trackable_cx - total_reached
+    o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
 
     # ── ROW 3: Charts ──
     ch1, ch2 = st.columns(2)
 
     with ch1:
         usage_data = pd.DataFrame({
-            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪', 'Channel Partner 🤝', 'No Data'],
-            'Count': [proper_usage, low_usage, no_usage, not_started, channel_partner, no_data]
+            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪'],
+            'Count': [proper_usage, low_usage, no_usage, not_started]
         })
+        if no_data > 0:
+            usage_data = pd.concat([usage_data, pd.DataFrame({'Status': ['No Data'], 'Count': [no_data]})], ignore_index=True)
         usage_data = usage_data[usage_data['Count'] > 0]
         fig_usage = px.pie(
             usage_data, values='Count', names='Status',
-            title='Usage Health Breakdown',
+            title='Customer Usage Health Breakdown (Excl. Channel Partners)',
             color='Status',
             color_discrete_map={
                 'Proper Usage 🟢': '#10B981',
                 'Low Usage 🟡': '#F59E0B',
                 'No Usage 🔴': '#EF4444',
                 'Not Started / Blank ⚪': '#94A3B8',
-                'Channel Partner 🤝': '#8B5CF6',
                 'No Data': '#D1D5DB'
             },
             hole=0.45
@@ -2429,8 +2439,8 @@ def render_dashboard(df_sales, prefix):
         st.plotly_chart(fig_usage, use_container_width=True)
 
     with ch2:
-        if 'plan name' in dash_df.columns:
-            plan_counts = dash_df['plan name'].dropna().value_counts().reset_index()
+        if 'plan name' in trackable_df.columns:
+            plan_counts = trackable_df['plan name'].dropna().value_counts().reset_index()
             plan_counts.columns = ['Plan', 'Customers']
             plan_counts = plan_counts[plan_counts['Plan'].str.strip() != '']
             if not plan_counts.empty:
@@ -2451,12 +2461,12 @@ def render_dashboard(df_sales, prefix):
                 st.info("No plan data to display.")
 
     # ── ROW 4: Outreach Progress Bar ──
-    if unique_cx > 0:
-        pct_reached = round(total_reached / unique_cx * 100)
+    if trackable_cx > 0:
+        pct_reached = round(total_reached / trackable_cx * 100)
         st.markdown(f"""
         <div style="background:#f3f4f6;border-radius:10px;padding:4px;margin:10px 0;">
             <div style="background:linear-gradient(90deg,#3B82F6,#10B981);width:{pct_reached}%;padding:10px 15px;border-radius:8px;color:white;font-weight:bold;font-size:14px;text-align:center;min-width:60px;">
-                {pct_reached}% Outreach Complete ({total_reached}/{unique_cx})
+                {pct_reached}% Outreach Complete ({total_reached}/{trackable_cx})
             </div>
         </div>
         """, unsafe_allow_html=True)
