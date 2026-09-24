@@ -149,6 +149,18 @@ try:
 except Exception:
     pass
 
+try:
+    conn.execute("ALTER TABLE customer_interactions ADD COLUMN support_ticket_sent INTEGER DEFAULT 0")
+    conn.commit()
+except Exception:
+    pass
+
+try:
+    conn.execute("ALTER TABLE customer_interactions ADD COLUMN last_support_ticket_at TEXT")
+    conn.commit()
+except Exception:
+    pass
+
 # Channel Partner table setup & persistence
 conn.execute('''CREATE TABLE IF NOT EXISTS known_channel_partners (
     phone TEXT PRIMARY KEY,
@@ -1351,6 +1363,168 @@ def send_callback_support_email(cx_name, cx_phone, cx_email, plan_name, follow_u
         return False, str(ex)
 
 
+# ── AUTOMATED SUPPORT TICKET DISPATCH FOR NO USAGE CUSTOMERS ──
+def send_no_usage_support_ticket(cx_dict, smtp_server=None, agent_email="satyam.kumar@credflow.in"):
+    import smtplib
+    from email.message import EmailMessage
+    import re
+
+    EMAIL_ADDRESS = "support@credflow.in"
+    EMAIL_PASSWORD = "slvyzkzxpsjaofxc"
+
+    if not agent_email or not str(agent_email).strip():
+        agent_email = "satyam.kumar@credflow.in"
+
+    cx_name = str(cx_dict.get('Name', 'Customer')).strip()
+    raw_p = str(cx_dict.get('phone', '')).replace('.0', '').replace('+91', '').strip()
+    cx_phone = raw_p if raw_p else "N/A"
+    cx_email = str(cx_dict.get('email', '')).strip()
+    if not cx_email or cx_email.lower() in ['nan', 'none', 'null', '']:
+        cx_email = "Not Available"
+
+    plan_name = str(cx_dict.get('plan name', 'CredFlow Plan')).strip()
+    last_sync = str(cx_dict.get('Last Sync in 7 days', 'No')).strip()
+    cp_raw = cx_dict.get('raw_credits', cx_dict.get('CP Usage in last 7 days', 0))
+    cp_usage = str(cp_raw).strip() if str(cp_raw).strip() not in ['', 'nan', 'None'] else "0"
+
+    wa_digits = re.sub(r'\D', '', cx_phone)
+    if len(wa_digits) > 10: wa_digits = wa_digits[-10:]
+    wa_link = f"https://wa.me/91{wa_digits}" if wa_digits else "#"
+
+    msg = EmailMessage()
+    msg['From'] = f"CredFlow Escalations - Satyam Kumar <{EMAIL_ADDRESS}>"
+    msg['To'] = "support@credflow.in"
+    msg['Reply-To'] = f"{agent_email.strip()}, support@credflow.in"
+    msg['Subject'] = f"🚨 [Support Ticket] Customer Not Using Software: {cx_name} ({cx_phone})"
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 24px; background-color: #FFFFFF;">
+        <div style="background-color: #FEF2F2; border-left: 5px solid #EF4444; padding: 14px 18px; border-radius: 4px; margin-bottom: 20px;">
+            <h3 style="margin: 0; color: #991B1B; font-size: 18px;">🚨 Support Escalation: Customer Not Using Software</h3>
+            <p style="margin: 6px 0 0 0; color: #7F1D1D; font-size: 13px;">
+                Customer has an active CredFlow subscription but has <b>No Usage in the last 7 days</b>. Proactive onboarding & adoption assistance requested.
+            </p>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 22px;">
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B; width: 38%;">👤 Customer Name:</td><td style="padding: 9px 0; font-weight: bold; color: #0F172A; font-size: 15px;">{cx_name}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">📱 Registered Phone:</td><td style="padding: 9px 0; font-weight: bold; color: #2563EB; font-size: 15px;">{cx_phone}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">✉️ Registered Email:</td><td style="padding: 9px 0; color: #0F172A;">{cx_email}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">📦 Subscribed Plan:</td><td style="padding: 9px 0; font-weight: 600; color: #0F172A;">{plan_name}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🚦 Health Status:</td><td style="padding: 9px 0; font-weight: bold; color: #DC2626;">🔴 No Usage (0 Credits, Inactive Sync)</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🔄 Last Sync (7 Days):</td><td style="padding: 9px 0; color: #0F172A;">{last_sync}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">⚡ CP Usage (7 Days):</td><td style="padding: 9px 0; color: #0F172A;">{cp_usage}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">👤 Escalated By:</td><td style="padding: 9px 0; color: #0F172A;">Satyam Kumar ({agent_email.strip()})</td></tr>
+        </table>
+
+        <div style="background-color: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 14px; margin-bottom: 20px;">
+            <b style="color: #334155; font-size: 13px;">📋 Action Required for Support Team:</b>
+            <ul style="margin: 6px 0 0 18px; padding: 0; color: #475569; font-size: 13px;">
+                <li>Call customer to check Tally / Busy sync connectivity.</li>
+                <li>Offer a quick software refresher / feature walkthrough.</li>
+                <li>Verify if user credentials or desktop connector need troubleshooting.</li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin: 15px 0;">
+            <a href="{wa_link}" style="background-color: #25D366; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin-right: 10px;">💬 WhatsApp Customer</a>
+            <a href="tel:{cx_phone}" style="background-color: #2563EB; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">📞 Call Customer</a>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 20px 0;">
+        <p style="margin: 0; color: #94A3B8; font-size: 12px; text-align: center;">Automated Support Escalation Alert &bull; CredFlow Adoption Portal &bull; Dispatcher: {agent_email.strip()}</p>
+    </div>
+    """
+
+    msg.set_content(f"Support Ticket: Customer {cx_name} ({cx_phone}) has No Usage on {plan_name}. Please reach out for adoption assistance.")
+    msg.add_alternative(html_content, subtype='html')
+
+    close_server = False
+    if smtp_server is None:
+        try:
+            smtp_server = smtplib.SMTP('smtp.gmail.com', 587, timeout=25)
+            smtp_server.ehlo()
+            smtp_server.starttls()
+            smtp_server.ehlo()
+            smtp_server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            close_server = True
+        except Exception:
+            smtp_server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=25)
+            smtp_server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            close_server = True
+
+    try:
+        smtp_server.send_message(msg)
+        return True, "Ticket Sent Successfully"
+    except Exception as e:
+        return False, str(e)
+    finally:
+        if close_server:
+            try:
+                smtp_server.quit()
+            except Exception:
+                pass
+
+
+def send_bulk_no_usage_support_tickets(cx_records, agent_email="satyam.kumar@credflow.in", progress_callback=None):
+    import smtplib
+    import time
+
+    EMAIL_ADDRESS = "support@credflow.in"
+    EMAIL_PASSWORD = "slvyzkzxpsjaofxc"
+
+    server = None
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+    except Exception:
+        try:
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=30)
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+        except Exception as e:
+            return False, [], [f"Could not connect to SMTP server: {e}"]
+
+    successful_phones = []
+    failed_details = []
+    total = len(cx_records)
+
+    for idx, r in enumerate(cx_records):
+        p_clean = str(r.get('phone', '')).replace('.0', '').replace('+91', '').strip()
+        cx_name = str(r.get('Name', 'Customer')).strip()
+
+        try:
+            succ, err = send_no_usage_support_ticket(r, smtp_server=server, agent_email=agent_email)
+            if succ:
+                successful_phones.append(p_clean)
+            else:
+                failed_details.append(f"{cx_name} ({p_clean}): {err}")
+        except Exception as e:
+            failed_details.append(f"{cx_name} ({p_clean}): {str(e)}")
+            try:
+                server = smtplib.SMTP('smtp.gmail.com', 587, timeout=30)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+                server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            except Exception:
+                pass
+
+        if progress_callback:
+            progress_callback(idx + 1, total, cx_name, len(successful_phones), len(failed_details))
+
+        time.sleep(0.2)
+
+    try:
+        server.quit()
+    except Exception:
+        pass
+
+    return True, successful_phones, failed_details
+
+
 # ── FREE WHATSAPP TEMPLATES ──
 def generate_wa_message_text(r):
     name = str(r.get('Name', '')).title()
@@ -2540,7 +2714,7 @@ def render_crm(cx_df):
     # ── TEST SANDBOX ──────────────────────────────────────────────
     with st.expander("🧪 **Test Sandbox — Single Message Tester (WhatsApp & Email)**", expanded=False):
         st.markdown("💡 *Bulk sending se pehle apne number/email par test message bhej kar verfiy karein.*")
-        tab_pwa, tab_wa, tab_email = st.tabs(["📲 Test Personal WhatsApp (Free Gateway)", "💬 Test WhatsApp API (Interakt)", "📧 Test Email (SMTP)"])
+        tab_pwa, tab_wa, tab_email, tab_ticket = st.tabs(["📲 Test Personal WhatsApp (Free Gateway)", "💬 Test WhatsApp API (Interakt)", "📧 Test Email (SMTP)", "🎫 Test Support Ticket (No Usage)"])
         
         with tab_pwa:
             st.markdown("#### 📲 Send Test WhatsApp from Your Personal Phone")
@@ -2628,11 +2802,144 @@ def render_crm(cx_df):
                         st.success(f"✅ Test Email sent successfully to {test_email_addr}!")
                     else:
                         st.error(f"❌ Failed to send Email: {resp}")
+
+        with tab_ticket:
+            st.markdown("#### 🎫 Test Single Support Escalation Ticket")
+            st.caption("Bhejein sample support ticket to `support@credflow.in` from `satyam.kumar@credflow.in` taaki format verify ho sake.")
+            ttk1, ttk2 = st.columns(2)
+            with ttk1:
+                test_tk_name = st.text_input("Customer Name", value="Sharma Traders", key="test_tk_name")
+            with ttk2:
+                test_tk_phone = st.text_input("Mobile Number (10 digit)", value="9876543210", key="test_tk_phone")
+            ttk3, ttk4 = st.columns(2)
+            with ttk3:
+                test_tk_email = st.text_input("Customer Email", value="sharma.traders@gmail.com", key="test_tk_email")
+            with ttk4:
+                test_tk_plan = st.text_input("Subscribed Plan", value="Saver Plan (1 Year)", key="test_tk_plan")
+
+            if st.button("🚀 Send Test Support Ticket to support@credflow.in", type="primary", use_container_width=True, key="btn_send_test_support_ticket"):
+                test_cx = {
+                    "Name": test_tk_name,
+                    "phone": test_tk_phone,
+                    "email": test_tk_email,
+                    "plan name": test_tk_plan,
+                    "Last Sync in 7 days": "Out of Sync (> 7 Days)",
+                    "raw_credits": "0",
+                    "Usage check": "No Usage 🔴"
+                }
+                with st.spinner("Dispatching test ticket to support@credflow.in..."):
+                    succ, res = send_no_usage_support_ticket(test_cx, agent_email="satyam.kumar@credflow.in")
+                if succ:
+                    st.success("✅ Test Support Ticket dispatched successfully to support@credflow.in!")
+                else:
+                    st.error(f"❌ Failed to dispatch ticket: {res}")
     # ──────────────────────────────────────────────────────────────
 
     st.markdown("---")
     st.markdown("### 📞 Interactive Telecalling CRM")
     st.info("⚡ **Auto-Save Enabled!** Aap is table mein kuch bhi edit (tick/type) karenge, toh woh immediately automatic save ho jayega.")
+
+    # ── NO USAGE SUPPORT TICKET ESCALATION DESK ──
+    no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
+    
+    with st.expander(f"🎫 **Support Ticket Escalation Desk — No Usage Customers ({len(no_usage_cx_all)} Total)**", expanded=False):
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%); border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <b style="color: #991B1B; font-size: 15px;">🚨 Proactive Escalation to CredFlow Support (Individual Tickets)</b>
+                    <p style="margin: 4px 0 0 0; color: #7F1D1D; font-size: 13px;">
+                        Yeh <b>{len(no_usage_cx_all)} customers</b> software actively use nahi kar rahe hain (0 sync / 0 credits in 7 days).
+                        Neeche diye button se har customer ka <b>alag individual support ticket (total {len(no_usage_cx_all)} emails)</b> seedhe <b>support@credflow.in</b> ko dispatch hoga from <b>satyam.kumar@credflow.in</b>.
+                    </p>
+                </div>
+                <span style="background: #EF4444; color: white; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 12px;">
+                    {len(no_usage_cx_all)} Inactive Accounts
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Check DB status for tickets
+        try:
+            ticket_db_df = pd.read_sql("SELECT phone, support_ticket_sent, last_support_ticket_at FROM customer_interactions WHERE support_ticket_sent = 1", conn)
+            ticket_sent_phones = set(ticket_db_df['phone'].astype(str).str.replace('.0', '').str.strip())
+        except Exception:
+            ticket_sent_phones = set()
+            
+        no_usage_cx_all['Ticket Status'] = no_usage_cx_all['phone'].apply(
+            lambda p: "✅ Ticket Created" if str(p).replace('.0', '').strip() in ticket_sent_phones else "⏳ Pending"
+        )
+        
+        tk_col1, tk_col2 = st.columns([2, 1])
+        with tk_col1:
+            ticket_agent_email = st.text_input("Sender / From Email Address", value="satyam.kumar@credflow.in", key="nu_ticket_agent_email")
+        with tk_col2:
+            st.text_input("Target Support Email", value="support@credflow.in", disabled=True, key="nu_target_support_email")
+            
+        pending_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'])
+        created_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '✅ Ticket Created'])
+        
+        st.markdown(f"""
+        <div style="display: flex; gap: 15px; margin-bottom: 12px; font-size: 13px; font-weight: 600;">
+            <span style="color: #DC2626;">⏳ Pending Tickets: {pending_cnt}</span>
+            <span style="color: #16A34A;">✅ Already Created: {created_cnt}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        btn_c1, btn_c2, btn_c3 = st.columns([2.5, 2, 1.5])
+        with btn_c1:
+            send_all_tickets = st.button(f"🚀 Dispatch All {len(no_usage_cx_all)} Support Tickets", type="primary", use_container_width=True, key="btn_send_all_nu_tickets")
+        with btn_c2:
+            send_pending_tickets = st.button(f"⚡ Dispatch Pending Only ({pending_cnt})", use_container_width=True, key="btn_send_pending_nu_tickets")
+        with btn_c3:
+            test_1_ticket = st.button("🧪 Test 1 Sample Ticket", use_container_width=True, key="btn_test_1_nu_ticket")
+            
+        # Preview Table
+        preview_cols = ['Name', 'phone', 'email', 'plan name', 'Last Sync in 7 days', 'Ticket Status']
+        st.dataframe(no_usage_cx_all[[c for c in preview_cols if c in no_usage_cx_all.columns]], use_container_width=True, hide_index=True)
+        
+        if test_1_ticket:
+            if not no_usage_cx_all.empty:
+                sample_row = no_usage_cx_all.iloc[0].to_dict()
+                with st.spinner(f"Sending test ticket for {sample_row.get('Name')}..."):
+                    succ, err = send_no_usage_support_ticket(sample_row, agent_email=ticket_agent_email)
+                if succ:
+                    st.success(f"✅ Sample Support Ticket sent successfully to support@credflow.in for {sample_row.get('Name')} ({sample_row.get('phone')})!")
+                else:
+                    st.error(f"❌ Failed to send sample ticket: {err}")
+            else:
+                st.info("No customers found in No Usage category.")
+                
+        targets_to_send = None
+        if send_all_tickets:
+            targets_to_send = no_usage_cx_all.to_dict('records')
+        elif send_pending_tickets:
+            targets_to_send = no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'].to_dict('records')
+            
+        if targets_to_send:
+            if not targets_to_send:
+                st.info("Sabhi customers ke tickets pehle se create ho chuke hain!")
+            else:
+                ph_ui, update_ui = create_progress_ui("Sending Support Tickets to support@credflow.in")
+                succ_flag, succ_phones, failed = send_bulk_no_usage_support_tickets(targets_to_send, agent_email=ticket_agent_email, progress_callback=update_ui)
+                
+                if succ_phones:
+                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    for p in succ_phones:
+                        conn.execute('''
+                            INSERT INTO customer_interactions (phone, support_ticket_sent, last_support_ticket_at)
+                            VALUES (?, 1, ?)
+                            ON CONFLICT(phone) DO UPDATE SET support_ticket_sent = 1, last_support_ticket_at = ?
+                        ''', (p, now_str, now_str))
+                    conn.commit()
+                    st.success(f"🎉 Successfully created & sent {len(succ_phones)} individual Support Tickets to support@credflow.in!")
+                    if failed:
+                        st.warning(f"⚠️ {len(failed)} tickets failed to send: {', '.join(failed[:3])}")
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error(f"❌ Failed to send tickets: {failed}")
 
     # ── QUICK CALLBACK SCHEDULER & SUPPORT ALERT ──
     with st.expander("⏰ Schedule Customer Callback & Auto Alert Support (1-Click Notification)", expanded=False):
