@@ -591,11 +591,8 @@ for t_id, data in DEFAULT_OUTREACH_TEMPLATES.items():
     cursor = conn.execute("SELECT COUNT(*) FROM outreach_templates WHERE template_id = ?", (t_id,))
     if cursor.fetchone()[0] == 0:
         conn.execute("INSERT INTO outreach_templates (template_id, channel, health_tier, subject, body, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-                     (t_id, data["channel"], data["health_tier"], data["subject"], data["body"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    else:
-        conn.execute("UPDATE outreach_templates SET channel=?, health_tier=?, subject=?, body=?, updated_at=? WHERE template_id=?",
-                     (data["channel"], data["health_tier"], data["subject"], data["body"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
-conn.commit()
+                     (t_id, data["channel"], data["health_tier"], data["subject"], data["body"], "2026-09-23 00:00:00"))
+        conn.commit()
 
 def fetch_template(t_id):
     """Fetches template record from SQLite database with fallback to default."""
@@ -4491,19 +4488,19 @@ with tab_dash:
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
         
         # Check if database is empty; only seed if 0 rows exist
-        cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0] if not s_batches.empty else 0
-        aug_cnt = 0
         try:
-            aug_cnt = pd.read_sql("SELECT COUNT(DISTINCT phone) FROM sales_plan_history WHERE LOWER(Upload_Batch) LIKE '%aug%'", conn).iloc[0, 0]
+            cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0]
         except Exception:
-            pass
-        if cur_row_cnt == 0 or aug_cnt < 355:
+            cur_row_cnt = 0
+
+        if cur_row_cnt == 0:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+                conn.commit()
                 st.cache_data.clear()
-                st.rerun()
+                s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
             hist_df = fetch_all_history(cache_key="v20260923_aug355_proper216")
