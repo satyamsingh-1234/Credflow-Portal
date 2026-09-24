@@ -1392,7 +1392,7 @@ def send_no_usage_support_ticket(cx_dict, smtp_server=None, agent_email="satyam.
     wa_link = f"https://wa.me/91{wa_digits}" if wa_digits else "#"
 
     msg = EmailMessage()
-    msg['From'] = f"CredFlow Escalations - Satyam Kumar <{EMAIL_ADDRESS}>"
+    msg['From'] = f"Satyam Kumar <{EMAIL_ADDRESS}>"
     msg['To'] = "support@credflow.in"
     msg['Reply-To'] = f"{agent_email.strip()}, support@credflow.in"
     msg['Subject'] = f"🚨 [Support Ticket] Customer Not Using Software: {cx_name} ({cx_phone})"
@@ -1400,7 +1400,7 @@ def send_no_usage_support_ticket(cx_dict, smtp_server=None, agent_email="satyam.
     html_content = f"""
     <div style="font-family: Arial, sans-serif; color: #1E293B; font-size: 14px; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 24px; background-color: #FFFFFF;">
         <div style="background-color: #FEF2F2; border-left: 5px solid #EF4444; padding: 14px 18px; border-radius: 4px; margin-bottom: 20px;">
-            <h3 style="margin: 0; color: #991B1B; font-size: 18px;">🚨 Support Escalation: Customer Not Using Software</h3>
+            <h3 style="margin: 0; color: #991B1B; font-size: 18px;">🚨 Support Ticket: Customer Not Using Software</h3>
             <p style="margin: 6px 0 0 0; color: #7F1D1D; font-size: 13px;">
                 Customer has an active CredFlow subscription but has <b>No Usage in the last 7 days</b>. Proactive onboarding & adoption assistance requested.
             </p>
@@ -1411,10 +1411,9 @@ def send_no_usage_support_ticket(cx_dict, smtp_server=None, agent_email="satyam.
             <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">📱 Registered Phone:</td><td style="padding: 9px 0; font-weight: bold; color: #2563EB; font-size: 15px;">{cx_phone}</td></tr>
             <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">✉️ Registered Email:</td><td style="padding: 9px 0; color: #0F172A;">{cx_email}</td></tr>
             <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">📦 Subscribed Plan:</td><td style="padding: 9px 0; font-weight: 600; color: #0F172A;">{plan_name}</td></tr>
-            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🚦 Health Status:</td><td style="padding: 9px 0; font-weight: bold; color: #DC2626;">🔴 No Usage (0 Credits, Inactive Sync)</td></tr>
-            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🔄 Last Sync (7 Days):</td><td style="padding: 9px 0; color: #0F172A;">{last_sync}</td></tr>
-            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">⚡ CP Usage (7 Days):</td><td style="padding: 9px 0; color: #0F172A;">{cp_usage}</td></tr>
-            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">👤 Escalated By:</td><td style="padding: 9px 0; color: #0F172A;">Satyam Kumar ({agent_email.strip()})</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🚦 Health Status:</td><td style="padding: 9px 0; font-weight: bold; color: #DC2626;">🔴 No Usage (Software Not In Active Use)</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">🔄 Last Sync Status:</td><td style="padding: 9px 0; color: #0F172A;">{last_sync}</td></tr>
+            <tr style="border-bottom: 1px solid #F1F5F9;"><td style="padding: 9px 0; font-weight: bold; color: #64748B;">👤 Raised By:</td><td style="padding: 9px 0; color: #0F172A;">Satyam Kumar ({agent_email.strip()})</td></tr>
         </table>
 
         <div style="background-color: #F8FAFC; border: 1px dashed #CBD5E1; border-radius: 8px; padding: 14px; margin-bottom: 20px;">
@@ -1432,7 +1431,7 @@ def send_no_usage_support_ticket(cx_dict, smtp_server=None, agent_email="satyam.
         </div>
 
         <hr style="border: none; border-top: 1px solid #E2E8F0; margin: 20px 0;">
-        <p style="margin: 0; color: #94A3B8; font-size: 12px; text-align: center;">Automated Support Escalation Alert &bull; CredFlow Adoption Portal &bull; Dispatcher: {agent_email.strip()}</p>
+        <p style="margin: 0; color: #94A3B8; font-size: 12px; text-align: center;">Automated Support Alert &bull; CredFlow Adoption Portal &bull; Raised by: {agent_email.strip()}</p>
     </div>
     """
 
@@ -2839,17 +2838,17 @@ def render_crm(cx_df):
     st.markdown("### 📞 Interactive Telecalling CRM")
     st.info("⚡ **Auto-Save Enabled!** Aap is table mein kuch bhi edit (tick/type) karenge, toh woh immediately automatic save ho jayega.")
 
-    # ── NO USAGE SUPPORT TICKET ESCALATION DESK ──
+    # ── NO USAGE SUPPORT TICKET DESK ──
     no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
     
-    with st.expander(f"🎫 **Support Ticket Escalation Desk — No Usage Customers ({len(no_usage_cx_all)} Total)**", expanded=False):
+    with st.expander(f"🎫 **Support Ticket Desk — No Usage Customers ({len(no_usage_cx_all)} Total)**", expanded=False):
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%); border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div>
-                    <b style="color: #991B1B; font-size: 15px;">🚨 Proactive Escalation to CredFlow Support (Individual Tickets)</b>
+                    <b style="color: #991B1B; font-size: 15px;">🚨 Support Ticket Desk: Proactive Assistance Request</b>
                     <p style="margin: 4px 0 0 0; color: #7F1D1D; font-size: 13px;">
-                        Yeh <b>{len(no_usage_cx_all)} customers</b> software actively use nahi kar rahe hain (0 sync / 0 credits in 7 days).
+                        Yeh <b>{len(no_usage_cx_all)} customers</b> software actively use nahi kar rahe hain.
                         Neeche diye button se har customer ka <b>alag individual support ticket (total {len(no_usage_cx_all)} emails)</b> seedhe <b>support@credflow.in</b> ko dispatch hoga from <b>satyam.kumar@credflow.in</b>.
                     </p>
                 </div>
