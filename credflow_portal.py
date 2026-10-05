@@ -83,11 +83,11 @@ if PERSISTENT_DB != REPO_DB:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
             s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20260926_july2609_aug2609" or p_cnt > 6500) and os.path.exists(csv_master):
+            if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt > 6500) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
                 p_conn.execute("DELETE FROM sales_plan_history")
                 clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20260926_july2609_aug2609') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_very_good_usage') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.commit()
@@ -1193,9 +1193,9 @@ def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0, is_
     pn_upper = str(plan_name).upper()
     is_lite = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
     
-    # Override Rule 1 (Lite Plan Exemption): For Lite/Basic plans, Login=Yes AND Sync=Yes -> ALWAYS Proper Usage 🟢
+    # Override Rule 1 (Lite Plan Exemption): For Lite/Basic plans, Login=Yes AND Sync=Yes -> ALWAYS Very Good Usage 🌟 (Proper + App Login)
     if is_lite and login_yes and sync_yes:
-        return "Proper Usage 🟢"
+        return "Very Good Usage 🌟"
         
     _, cp_score = eval_plan_credits_and_score(plan_name, c_val)
     
@@ -1211,12 +1211,16 @@ def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0, is_
     if contact_val > 30: pts += 2
     elif contact_val >= 11: pts += 1
     
-    # Classification Rules (Strict Original Matrix):
-    # - Proper Usage 🟢: Score >= 4
+    # Classification Rules (Strict Original Matrix + App Login Condition):
+    # - Very Good Usage 🌟: Proper Usage criteria (Score >= 4) + App Login within 7 days = Yes
+    # - Proper Usage 🟢: Proper Usage criteria (Score >= 4), but App Login within 7 days = No
     # - Low Usage 🟡: Score = 1 to 3
     # - No Usage 🔴: Score = 0
     if pts >= 4:
-        return "Proper Usage 🟢"
+        if login_yes:
+            return "Very Good Usage 🌟"
+        else:
+            return "Proper Usage 🟢"
     elif pts >= 1:
         return "Low Usage 🟡"
     else:
@@ -2140,7 +2144,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20260926_july2609_aug2609"):
+def prepare_eval_df(df_sales, cache_key="v20261005_very_good_usage"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -2207,7 +2211,9 @@ def prepare_eval_df(df_sales, cache_key="v20260926_july2609_aug2609"):
         plan_n = str(row.get('plan name', ''))
 
         existing_status = str(row.get('Usage check', '')).strip()
-        if existing_status in ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"]:
+        if existing_status == "Proper Usage 🟢" and l_val == "Yes":
+            return "Very Good Usage 🌟"
+        if existing_status in ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"]:
             return existing_status
 
         return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val, is_blank_setup=False)
@@ -2338,7 +2344,7 @@ def render_dashboard(df_sales, prefix):
     
     temp_plans = df_sales['plan name'].replace("", pd.NA).ffill()
     all_plans = [p for p in temp_plans.dropna().unique() if str(p).strip() != ""]
-    usage_opts = ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "Channel Partner 🤝", "No Data (Not Uploaded)"]
+    usage_opts = ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪", "Channel Partner 🤝", "No Data (Not Uploaded)"]
     
     batches_in_data = []
     if 'Upload_Batch' in df_sales.columns:
@@ -2548,8 +2554,9 @@ def render_dashboard(df_sales, prefix):
     not_started = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
     no_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
     low_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
-    proper_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
-    no_data = max(0, trackable_cx - not_started - no_usage - low_usage - proper_usage)
+    very_good = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+    proper_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Proper Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+    no_data = max(0, trackable_cx - not_started - no_usage - low_usage - proper_usage - very_good)
 
     dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
     trackable_df['phone'] = trackable_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -2562,13 +2569,14 @@ def render_dashboard(df_sales, prefix):
     email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
 
     # ── ROW 1: KPI Cards ──
-    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
     k1.metric("👥 Trackable Customers", trackable_cx, delta=f"Excl. {channel_partner} CP" if channel_partner else None, delta_color="off", help=f"Total: {unique_cx} records (including {channel_partner} Channel Partners)")
-    k2.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
-    k3.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
-    k4.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
-    k5.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
-    k6.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
+    k2.metric("🌟 Very Good Usage", very_good, delta=f"{round(very_good/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
+    k3.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
+    k4.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+    k5.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
+    k6.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+    k7.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
 
     # ── ROW 2: Outreach KPIs ──
     o1, o2, o3, o4 = st.columns(4)
@@ -2584,8 +2592,8 @@ def render_dashboard(df_sales, prefix):
 
     with ch1:
         usage_data = pd.DataFrame({
-            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪'],
-            'Count': [proper_usage, low_usage, no_usage, not_started]
+            'Status': ['Very Good Usage 🌟', 'Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪'],
+            'Count': [very_good, proper_usage, low_usage, no_usage, not_started]
         })
         if no_data > 0:
             usage_data = pd.concat([usage_data, pd.DataFrame({'Status': ['No Data'], 'Count': [no_data]})], ignore_index=True)
@@ -2595,6 +2603,7 @@ def render_dashboard(df_sales, prefix):
             title='Customer Usage Health Breakdown (Excl. Channel Partners)',
             color='Status',
             color_discrete_map={
+                'Very Good Usage 🌟': '#059669',
                 'Proper Usage 🟢': '#10B981',
                 'Low Usage 🟡': '#F59E0B',
                 'No Usage 🔴': '#EF4444',
@@ -2646,7 +2655,7 @@ def render_dashboard(df_sales, prefix):
         ### 📊 CredFlow Customer Usage Health Scoring Model
 
         #### ⭐ Special Override Rule (Lite / Basic Plans):
-        - **Rule 1 (Lite Plan Exemption)**: For **Lite / Basic / Starter** plans, if **App Login in last 7 days = `Yes`** **AND** **Last Sync in 7 days = `Yes`**, the customer is classified directly as **`🟢 Proper Usage`** *(regardless of credits used, recognizing active daily monitoring)*.
+        - **Rule 1 (Lite Plan Exemption)**: For **Lite / Basic / Starter** plans, if **App Login in last 7 days = `Yes`** **AND** **Last Sync in 7 days = `Yes`**, the customer is classified directly as **`🌟 Very Good Usage`** *(Proper Usage + App Login within 7 days)*.
 
         ---
 
@@ -2663,7 +2672,8 @@ def render_dashboard(df_sales, prefix):
         ---
 
         ### 🚦 Health Category Classification Rules:
-        - 🟢 **Proper Usage (Score ≥ 4 OR Lite Plan with Login + Sync)**: Active, engaged customers utilizing CredFlow.
+        - 🌟 **Very Good Usage (Proper Usage criteria + App Login within 7 days Mandatory)**: Score ≥ 4 (or Lite exemption) AND App Login in last 7 days = `Yes`.
+        - 🟢 **Proper Usage (Score ≥ 4, but App Login in last 7 days = `No`)**: High credit / sync usage but mobile app login pending.
         - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
         - 🔴 **No Usage (Score = 0)**: Inactive tracked customers *(Account active/connected, but 0 credits used and out of sync > 7 days)*.
         - ⚪ **Not Started / Blank Setup**: Customers with Blank Last Sync, Blank App Login, and 0 Credits *(Initial desktop sync/setup pending or not initiated)*.
@@ -2724,7 +2734,7 @@ def render_crm(cx_df):
                 test_pwa_name = st.text_input("Customer Name", value="Test Customer", key="test_pwa_name")
             tp3, tp4 = st.columns(2)
             with tp3:
-                test_pwa_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_pwa_health")
+                test_pwa_health = st.selectbox("Usage Health Category", ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_pwa_health")
             with tp4:
                 test_pwa_plan = st.text_input("Plan Name", value="Premium Plan", key="test_pwa_plan")
                 
@@ -2756,7 +2766,7 @@ def render_crm(cx_df):
                 test_wa_name = st.text_input("Customer Name", value="Test Customer", key="test_wa_name")
             tc3, tc4 = st.columns(2)
             with tc3:
-                test_wa_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_wa_health")
+                test_wa_health = st.selectbox("Usage Health Category", ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_wa_health")
             with tc4:
                 test_wa_credits = st.text_input("Raw Credits / Used", value="500", key="test_wa_credits")
                 
@@ -2780,7 +2790,7 @@ def render_crm(cx_df):
                 test_email_name = st.text_input("Customer Name", value="Test Customer", key="test_email_name")
             tec3, tec4 = st.columns(2)
             with tec3:
-                test_email_health = st.selectbox("Usage Health Category", ["Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_email_health")
+                test_email_health = st.selectbox("Usage Health Category", ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Not Started / Blank Setup ⚪"], key="test_email_health")
             with tec4:
                 test_email_plan = st.text_input("Plan Name", value="Premium Plan", key="test_email_plan")
                 
@@ -3598,23 +3608,27 @@ def render_batch_comparison(conn):
     low_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Low Usage', na=False)])
     low_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Low Usage', na=False)])
 
-    prop_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
-    prop_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Proper Usage', na=False)])
+    vg_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+    vg_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+
+    prop_old = len(cx_old[cx_old['Usage check'].astype(str).str.contains('Proper Usage', na=False) & ~cx_old['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+    prop_new = len(cx_new[cx_new['Usage check'].astype(str).str.contains('Proper Usage', na=False) & ~cx_new['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
 
     # Metrics delta cards
     st.markdown("#### 📊 Side-by-Side KPI Comparison")
-    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+    mc1, mc2, mc3, mc4, mc5, mc6 = st.columns(6)
     mc1.metric("👥 Total Customers", f"A: {total_old} | B: {total_new}", delta=f"{total_new - total_old} ({round((total_new - total_old)/total_old*100) if total_old else 0}%)")
-    mc2.metric("🟢 Proper Usage", f"A: {prop_old} | B: {prop_new}", delta=f"{prop_new - prop_old}", delta_color="normal")
-    mc3.metric("🟡 Low Usage", f"A: {low_old} | B: {low_new}", delta=f"{low_new - low_old}", delta_color="off")
-    mc4.metric("🔴 No Usage", f"A: {no_old} | B: {no_new}", delta=f"{no_new - no_old}", delta_color="inverse")
-    mc5.metric("⚪ Not Started", f"A: {ns_old} | B: {ns_new}", delta=f"{ns_new - ns_old}", delta_color="off")
+    mc2.metric("🌟 Very Good Usage", f"A: {vg_old} | B: {vg_new}", delta=f"{vg_new - vg_old}", delta_color="normal")
+    mc3.metric("🟢 Proper Usage", f"A: {prop_old} | B: {prop_new}", delta=f"{prop_new - prop_old}", delta_color="normal")
+    mc4.metric("🟡 Low Usage", f"A: {low_old} | B: {low_new}", delta=f"{low_new - low_old}", delta_color="off")
+    mc5.metric("🔴 No Usage", f"A: {no_old} | B: {no_new}", delta=f"{no_new - no_old}", delta_color="inverse")
+    mc6.metric("⚪ Not Started", f"A: {ns_old} | B: {ns_new}", delta=f"{ns_new - ns_old}", delta_color="off")
 
     # Side-by-Side Bar Chart
     comp_chart_df = pd.DataFrame({
-        'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started ⚪'] * 2,
-        'Batch': ['Batch A (Older)'] * 4 + ['Batch B (Newer)'] * 4,
-        'Customers': [prop_old, low_old, no_old, ns_old, prop_new, low_new, no_new, ns_new]
+        'Status': ['Very Good Usage 🌟', 'Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started ⚪'] * 2,
+        'Batch': ['Batch A (Older)'] * 5 + ['Batch B (Newer)'] * 5,
+        'Customers': [vg_old, prop_old, low_old, no_old, ns_old, vg_new, prop_new, low_new, no_new, ns_new]
     })
     
     fig_comp = px.bar(
@@ -4532,13 +4546,16 @@ def render_weekly_cp_tracker(conn):
                         is_lite = any(k in pn_upper for k in ['LITE', 'BASIC', 'STARTER'])
 
                         if is_lite and login_val == 'Yes' and sync_val == 'Yes':
-                            health = "Proper Usage 🟢"
+                            health = "Very Good Usage 🌟"
                             score = 4
                         else:
                             _, cp_pts = eval_plan_credits_and_score(p_name, cp_num)
                             score = (2 if login_val == 'Yes' else 0) + (1 if sync_val == 'Yes' else 0) + cp_pts
                             if score >= 4:
-                                health = "Proper Usage 🟢"
+                                if login_val == 'Yes':
+                                    health = "Very Good Usage 🌟"
+                                else:
+                                    health = "Proper Usage 🟢"
                             elif score >= 1:
                                 health = "Low Usage 🟡"
                             else:
@@ -4615,25 +4632,27 @@ def render_weekly_cp_tracker(conn):
 
     cx_week = week_df.drop_duplicates(subset=['phone'], keep='last').copy()
     total_cx_w = len(cx_week)
-    proper_w = len(cx_week[cx_week['health_status'].str.contains('Proper Usage', na=False)])
+    vg_w = len(cx_week[cx_week['health_status'].str.contains('Very Good Usage', na=False)])
+    proper_w = len(cx_week[cx_week['health_status'].str.contains('Proper Usage', na=False) & ~cx_week['health_status'].str.contains('Very Good Usage', na=False)])
     low_w = len(cx_week[cx_week['health_status'].str.contains('Low Usage', na=False)])
     no_w = len(cx_week[cx_week['health_status'].str.contains('No Usage', na=False)])
     total_cp_consumed = int(cx_week['weekly_cp_used'].fillna(0).sum())
 
     # ── ROW 1: Weekly KPI Cards ──
-    wk1, wk2, wk3, wk4, wk5 = st.columns(5)
+    wk1, wk2, wk3, wk4, wk5, wk6 = st.columns(6)
     wk1.metric("👥 Total Customers", total_cx_w)
-    wk2.metric("🟢 Proper Usage", proper_w, delta=f"{round(proper_w/total_cx_w*100)}%" if total_cx_w else "0%")
-    wk3.metric("🟡 Low Usage", low_w, delta=f"{round(low_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="off")
-    wk4.metric("🔴 No Usage", no_w, delta=f"{round(no_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="inverse")
-    wk5.metric("⚡ Total CP Consumed", f"{total_cp_consumed:,}")
+    wk2.metric("🌟 Very Good Usage", vg_w, delta=f"{round(vg_w/total_cx_w*100)}%" if total_cx_w else "0%")
+    wk3.metric("🟢 Proper Usage", proper_w, delta=f"{round(proper_w/total_cx_w*100)}%" if total_cx_w else "0%")
+    wk4.metric("🟡 Low Usage", low_w, delta=f"{round(low_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="off")
+    wk5.metric("🔴 No Usage", no_w, delta=f"{round(no_w/total_cx_w*100)}%" if total_cx_w else "0%", delta_color="inverse")
+    wk6.metric("⚡ Total CP Consumed", f"{total_cp_consumed:,}")
 
     # ── ROW 2: Charts ──
     wch1, wch2 = st.columns(2)
     with wch1:
         w_usage_data = pd.DataFrame({
-            'Status': ['Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴'],
-            'Count': [proper_w, low_w, no_w]
+            'Status': ['Very Good Usage 🌟', 'Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴'],
+            'Count': [vg_w, proper_w, low_w, no_w]
         })
         w_usage_data = w_usage_data[w_usage_data['Count'] > 0]
         fig_w_pie = px.pie(
@@ -4641,6 +4660,7 @@ def render_weekly_cp_tracker(conn):
             title=f'Weekly Usage Health Breakdown ({sel_week})',
             color='Status',
             color_discrete_map={
+                'Very Good Usage 🌟': '#059669',
                 'Proper Usage 🟢': '#10B981',
                 'Low Usage 🟡': '#F59E0B',
                 'No Usage 🔴': '#EF4444'
