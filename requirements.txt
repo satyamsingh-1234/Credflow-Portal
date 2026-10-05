@@ -1,3 +1,4 @@
+# Streamlit Community Cloud Build Trigger: 2026-10-05
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.15.0
