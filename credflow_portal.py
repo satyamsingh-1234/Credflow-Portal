@@ -2146,12 +2146,17 @@ def prepare_eval_df(df_sales, cache_key="v20261005_very_good_usage"):
         'App login done in last 7 days', 'raw_credits', 
         'Plan Stat Date', 'Plan End Date'
     ]
-    for col in ffill_cols:
-        if col in eval_df.columns:
-            if 'Upload_Batch' in eval_df.columns:
-                eval_df[col] = eval_df.groupby(['phone', 'Upload_Batch'])[col].transform(lambda s: s.replace("", pd.NA).ffill().bfill())
-            else:
-                eval_df[col] = eval_df.groupby('phone')[col].transform(lambda s: s.replace("", pd.NA).ffill().bfill())
+    valid_cols = [c for c in ffill_cols if c in eval_df.columns]
+    if valid_cols:
+        eval_df[valid_cols] = eval_df[valid_cols].replace("", pd.NA)
+        if 'Upload_Batch' in eval_df.columns:
+            g = ['phone', 'Upload_Batch']
+            eval_df[valid_cols] = eval_df.groupby(g)[valid_cols].ffill()
+            eval_df[valid_cols] = eval_df[valid_cols].groupby([eval_df[c] for c in g]).bfill()
+        else:
+            eval_df[valid_cols] = eval_df.groupby('phone')[valid_cols].ffill()
+            eval_df[valid_cols] = eval_df[valid_cols].groupby(eval_df['phone']).bfill()
+        for col in valid_cols:
             if col in filtered.columns:
                 filtered[col] = eval_df[col]
             
@@ -2245,43 +2250,39 @@ def prepare_eval_df(df_sales, cache_key="v20261005_very_good_usage"):
         eval_df['parsed_plan_dt'] = pd.to_datetime(eval_df[plan_dt_col], errors='coerce', dayfirst=True)
     else:
         eval_df['parsed_plan_dt'] = pd.NaT
-    
-    def _calc_row_eff_dt(row):
-        u_dt = row.get('Upload_Date', '')
-        if pd.notna(u_dt) and str(u_dt).strip() and str(u_dt).strip().lower() not in ['nan', 'none', '']:
-            try:
-                p_dt = pd.to_datetime(u_dt, errors='coerce', dayfirst=True)
-                if pd.notna(p_dt):
-                    return p_dt.date()
-            except Exception:
-                pass
 
-        p_dt = row.get('parsed_plan_dt')
-        if pd.notna(p_dt):
-            return p_dt.date()
-        batch = str(row.get('Upload_Batch', ''))
-        
-        if 'July' in batch or 'july' in batch:
-            return date(2026, 7, 15)
-        if 'Aug' in batch or 'aug' in batch or 'usage_seet' in batch:
-            return date(2026, 8, 15)
-            
-        m = re.search(r'(\d{2})(\d{2})(\d{4})', batch)
-        if m:
-            day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            if 1 <= month <= 12 and 1 <= day <= 31:
-                try:
-                    return date(year, month, day)
-                except Exception:
-                    pass
-                    
-        if 'Sep' in batch or 'sep' in batch or '092026' in batch:
-            return date(2026, 9, 15)
-        elif 'Oct' in batch or 'oct' in batch or '102026' in batch:
-            return date(2026, 10, 15)
-        return date.today()
+    if 'Upload_Date' in eval_df.columns:
+        parsed_upload_dt = pd.to_datetime(eval_df['Upload_Date'], errors='coerce', dayfirst=True).dt.date
+    else:
+        parsed_upload_dt = pd.Series([None]*len(eval_df), index=eval_df.index)
 
-    eval_df['row_eff_dt'] = eval_df.apply(_calc_row_eff_dt, axis=1)
+    unique_batches = eval_df['Upload_Batch'].dropna().unique() if 'Upload_Batch' in eval_df.columns else []
+    batch_date_map = {}
+    for b in unique_batches:
+        b_str = str(b)
+        if 'July' in b_str or 'july' in b_str:
+            batch_date_map[b] = date(2026, 7, 15)
+        elif 'Aug' in b_str or 'aug' in b_str or 'usage_seet' in b_str:
+            batch_date_map[b] = date(2026, 8, 15)
+        else:
+            m = re.search(r'(\d{2})(\d{2})(\d{4})', b_str)
+            if m:
+                day, month, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                if 1 <= month <= 12 and 1 <= day <= 31:
+                    try:
+                        batch_date_map[b] = date(year, month, day)
+                        continue
+                    except Exception:
+                        pass
+            if 'Sep' in b_str or 'sep' in b_str or '092026' in b_str:
+                batch_date_map[b] = date(2026, 9, 15)
+            elif 'Oct' in b_str or 'oct' in b_str or '102026' in b_str:
+                batch_date_map[b] = date(2026, 10, 15)
+            else:
+                batch_date_map[b] = date.today()
+
+    batch_eff = eval_df['Upload_Batch'].map(batch_date_map) if 'Upload_Batch' in eval_df.columns else pd.Series([date.today()]*len(eval_df), index=eval_df.index)
+    eval_df['row_eff_dt'] = parsed_upload_dt.combine_first(eval_df['parsed_plan_dt'].dt.date).combine_first(batch_eff).fillna(date.today())
     cust_dt_map = eval_df.groupby('phone')['row_eff_dt'].max().to_dict()
     eval_df['effective_date'] = eval_df['phone'].map(cust_dt_map)
     filtered['effective_date'] = eval_df['effective_date']
@@ -4805,7 +4806,6 @@ tab_dash, tab_weekly, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
 
 with tab_dash:
     with st.spinner("📊 Analyzing Customer Usage Health Matrix & Live CRM Analytics..."):
-        time.sleep(0.18)
         import pandas as pd
         s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
         
