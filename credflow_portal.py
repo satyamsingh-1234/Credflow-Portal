@@ -20,7 +20,7 @@ if not os.path.exists(logo_path):
 
 st.set_page_config(
     page_title="CredFlow | Customer Adoption & Credit Analytics Portal",
-    page_icon=logo_path if os.path.exists(logo_path) else "⚡",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -79,8 +79,11 @@ try:
     s_ver = cur.fetchone()
     
     csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-    cur.execute("SELECT COUNT(*) FROM sales_plan_history")
-    p_cnt = cur.fetchone()[0]
+    try:
+        cur.execute("SELECT COUNT(*) FROM sales_plan_history")
+        p_cnt = cur.fetchone()[0]
+    except Exception:
+        p_cnt = 0
 
     if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt == 0 or p_cnt > 6500) and os.path.exists(csv_master):
         clean_df = pd.read_csv(csv_master)
@@ -4833,17 +4836,14 @@ with tab_weekly:
 
 with tab_comp:
     with st.spinner("⚔️ Calculating Cohort Comparison & Adoption Growth Rates..."):
-        time.sleep(0.18)
         render_batch_comparison(conn)
 
 with tab_hist:
     with st.spinner("📜 Retrieving WhatsApp & Email Outreach Dispatch Logs..."):
-        time.sleep(0.18)
         render_outreach_history(conn)
 
 with tab_tpl:
     with st.spinner("📝 Loading Interakt WA & Email Outreach Templates..."):
-        time.sleep(0.18)
         render_template_manager(conn)
 
 with tab_upload:
@@ -4851,7 +4851,6 @@ with tab_upload:
         st.warning("🔒 **Admin Access Required**: File upload, batch management, and database deletion require Admin Access. Please select **🔑 Admin Access** in the sidebar to unlock these features.")
     else:
         with st.spinner("⚙️ Loading Master Data Management & Upload Controls..."):
-            time.sleep(0.18)
             action = st.radio("Select Action", ["📤 Upload New Master Data", "📅 View & Delete Past Upload Batches"], horizontal=True, key="upload_action_radio")
 
             if action == "📤 Upload New Master Data":
