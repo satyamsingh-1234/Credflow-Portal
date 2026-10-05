@@ -82,13 +82,10 @@ try:
     try:
         cur.execute("SELECT COUNT(*) FROM sales_plan_history")
         p_cnt = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM (SELECT DISTINCT * FROM sales_plan_history)")
-        p_distinct = cur.fetchone()[0]
     except Exception:
         p_cnt = 0
-        p_distinct = 0
 
-    if (not s_ver or s_ver[0] != "v20261005_clean_734_final" or p_cnt == 0 or p_cnt != p_distinct) and os.path.exists(csv_master):
+    if p_cnt == 0 and os.path.exists(csv_master):
         clean_df = pd.read_csv(csv_master).drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_clean_734_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
@@ -4822,12 +4819,10 @@ with tab_dash:
         # Check if database is empty; only seed if 0 rows exist
         try:
             cur_row_cnt = pd.read_sql("SELECT COUNT(*) FROM sales_plan_history", conn).iloc[0, 0]
-            cur_distinct_cnt = pd.read_sql("SELECT COUNT(*) FROM (SELECT DISTINCT * FROM sales_plan_history)", conn).iloc[0, 0]
         except Exception:
             cur_row_cnt = 0
-            cur_distinct_cnt = 0
 
-        if cur_row_cnt == 0 or cur_row_cnt != cur_distinct_cnt:
+        if cur_row_cnt == 0:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master).drop_duplicates()
