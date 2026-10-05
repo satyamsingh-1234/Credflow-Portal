@@ -85,10 +85,10 @@ try:
     except Exception:
         p_cnt = 0
 
-    if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt == 0 or p_cnt > 6500) and os.path.exists(csv_master):
-        clean_df = pd.read_csv(csv_master)
+    if (not s_ver or s_ver[0] != "v20261005_clean_734_final" or p_cnt == 0 or p_cnt > 6500) and os.path.exists(csv_master):
+        clean_df = pd.read_csv(csv_master).drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_very_good_usage') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_clean_734_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
@@ -629,16 +629,16 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20261005_very_good_usage"):
+def fetch_history_batch(batch_name, cache_key="v20261005_clean_734_final"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
-        return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
+        return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,)).drop_duplicates()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20261005_very_good_usage"):
-    """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
+def fetch_all_history(cache_key="v20261005_clean_734_final"):
+    """Aggressively cache full master dataset read (5,621 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
-        return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
+        return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn).drop_duplicates()
 
 st.markdown("""
 <style>
@@ -2132,9 +2132,9 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20261005_very_good_usage"):
+def prepare_eval_df(df_sales, cache_key="v20261005_clean_734_final"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
-    filtered = df_sales.copy()
+    filtered = df_sales.drop_duplicates().copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
 
     eval_df = filtered.copy()
@@ -4788,8 +4788,10 @@ if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
 if st.sidebar.button("🔁 Reset Master Data (355 Aug + 379 July = 734)", use_container_width=True, help="Force reset database to official master: 355 August + 379 July customers"):
     csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
     if os.path.exists(csv_master):
-        clean_df = pd.read_csv(csv_master, compression='gzip')
+        clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_clean_734_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.commit()
         st.cache_data.clear()
         st.sidebar.success("✅ Database restored to 355 Aug + 379 July!")
         st.rerun()
@@ -4815,17 +4817,17 @@ with tab_dash:
         except Exception:
             cur_row_cnt = 0
 
-        if cur_row_cnt == 0:
+        if cur_row_cnt == 0 or cur_row_cnt > 6500:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
-                clean_df = pd.read_csv(csv_master)
+                clean_df = pd.read_csv(csv_master).drop_duplicates()
                 clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
                 conn.commit()
                 st.cache_data.clear()
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20261005_very_good_usage")
+            hist_df = fetch_all_history(cache_key="v20261005_clean_734_final")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
@@ -5074,7 +5076,7 @@ with tab_upload:
 
                                 # 5. Persist to clean_master_data.csv.gz so Streamlit Cloud git redeploys retain the updated master data!
                                 try:
-                                    all_updated = pd.read_sql("SELECT * FROM sales_plan_history", conn)
+                                    all_updated = pd.read_sql("SELECT * FROM sales_plan_history", conn).drop_duplicates()
                                     csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
                                     all_updated.to_csv(csv_master, index=False, compression='gzip')
                                 except Exception:
