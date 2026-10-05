@@ -47,15 +47,6 @@ CHANNEL_PARTNER_PHONES = {p[0] for p in DEFAULT_CHANNEL_PARTNERS}
 TMP_DIR = "/tmp" if os.name != 'nt' and os.path.exists("/tmp") else None
 PERSISTENT_DB = os.path.join(TMP_DIR, "credflow_history.db") if TMP_DIR else REPO_DB
 
-# Ensure persistent DB has clean settings
-for db_target in set(filter(None, [REPO_DB, PERSISTENT_DB])):
-    if os.path.exists(db_target):
-        try:
-            with sqlite3.connect(db_target, timeout=15.0) as t_conn:
-                pass
-        except Exception:
-            pass
-
 if PERSISTENT_DB != REPO_DB:
     if not os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
         import shutil
@@ -63,42 +54,48 @@ if PERSISTENT_DB != REPO_DB:
             shutil.copy2(REPO_DB, PERSISTENT_DB)
         except Exception:
             pass
-    elif os.path.exists(PERSISTENT_DB) and os.path.exists(REPO_DB):
-        # Auto-sync clean master data when scoring version changes or database has duplicate batches
+
+DB_PATH = PERSISTENT_DB if (PERSISTENT_DB and os.path.exists(PERSISTENT_DB)) else REPO_DB
+if not os.path.exists(DB_PATH) and os.path.exists(r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"):
+    DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
+
+conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=30.0)
+try:
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA busy_timeout=30000;')
+except Exception:
+    pass
+
+# Auto-sync clean master data when scoring version changes or database is empty
+try:
+    conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute("CREATE TABLE IF NOT EXISTS known_channel_partners (phone TEXT PRIMARY KEY, name TEXT, partner_name TEXT, tag_source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    for cp in DEFAULT_CHANNEL_PARTNERS:
+        conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
+    conn.commit()
+
+    cur = conn.cursor()
+    cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
+    s_ver = cur.fetchone()
+    
+    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+    cur.execute("SELECT COUNT(*) FROM sales_plan_history")
+    p_cnt = cur.fetchone()[0]
+
+    if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt == 0 or p_cnt > 6500) and os.path.exists(csv_master):
+        clean_df = pd.read_csv(csv_master)
+        clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_very_good_usage') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.commit()
+
+    # Sync any missing interaction records from repo DB to persistent DB if persistent is separate
+    if PERSISTENT_DB != REPO_DB and os.path.exists(REPO_DB):
         try:
-            p_conn = sqlite3.connect(PERSISTENT_DB, timeout=30.0)
-            cur = p_conn.cursor()
-            cur.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
-            cur.execute("CREATE TABLE IF NOT EXISTS known_channel_partners (phone TEXT PRIMARY KEY, name TEXT, partner_name TEXT, tag_source TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            for cp in DEFAULT_CHANNEL_PARTNERS:
-                cur.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
-            p_conn.commit()
-            cur.execute("SELECT COUNT(*) FROM sales_plan_history")
-            p_cnt = cur.fetchone()[0]
-
-            # In-place non-destructive update for outdated BVP labels (preserves user uploads)
-            p_conn.execute("UPDATE sales_plan_history SET [CP Usage in last 7 days] = '>1000' WHERE [plan name] LIKE '%BVP%' AND ([CP Usage in last 7 days] LIKE '%100%' OR [CP Usage in last 7 days] = '>100')")
-            p_conn.commit()
-
-            csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-            cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
-            s_ver = cur.fetchone()
-            if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt > 6500) and os.path.exists(csv_master):
-                clean_df = pd.read_csv(csv_master)
-                clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_very_good_usage') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-                p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-                p_conn.commit()
-                st.cache_data.clear()
-
-            # Sync any missing interaction records from repo DB to persistent DB
-            r_conn = sqlite3.connect(REPO_DB, timeout=10.0)
-            r_df = pd.read_sql("SELECT * FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '') OR (follow_up IS NOT NULL AND follow_up != '')", r_conn)
-            r_conn.close()
-            
-            p_existing = [r[0] for r in p_conn.execute("SELECT phone FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '')").fetchall()]
-            
+            with sqlite3.connect(REPO_DB, timeout=10.0) as r_conn:
+                r_df = pd.read_sql("SELECT * FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '') OR (follow_up IS NOT NULL AND follow_up != '')", r_conn)
+            p_existing = [r[0] for r in conn.execute("SELECT phone FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '')").fetchall()]
             for _, r_row in r_df.iterrows():
                 p = str(r_row.get('phone', ''))
                 if p and p not in p_existing:
@@ -109,25 +106,14 @@ if PERSISTENT_DB != REPO_DB:
                     rem = str(r_row.get('remarks', ''))
                     fu = str(r_row.get('follow_up', ''))
                     l_at = str(r_row.get('last_call_at', ''))
-                    
-                    p_conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
-                    p_conn.execute('''
+                    conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
+                    conn.execute('''
                         INSERT INTO customer_interactions (phone, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, last_call_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (p, c, su, it, poa, rem, fu, l_at))
-            p_conn.commit()
-            p_conn.close()
+            conn.commit()
         except Exception:
             pass
-
-DB_PATH = PERSISTENT_DB if os.path.exists(PERSISTENT_DB) else REPO_DB
-if not os.path.exists(DB_PATH) and os.path.exists(r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"):
-    DB_PATH = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_db\credflow_history.db"
-
-conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=60.0)
-try:
-    conn.execute('PRAGMA journal_mode=DELETE;')
-    conn.execute('PRAGMA busy_timeout=60000;')
 except Exception:
     pass
 
