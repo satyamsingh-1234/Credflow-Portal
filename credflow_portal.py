@@ -85,8 +85,7 @@ if PERSISTENT_DB != REPO_DB:
             s_ver = cur.fetchone()
             if (not s_ver or s_ver[0] != "v20261005_very_good_usage" or p_cnt > 6500) and os.path.exists(csv_master):
                 clean_df = pd.read_csv(csv_master)
-                p_conn.execute("DELETE FROM sales_plan_history")
-                clean_df.to_sql("sales_plan_history", p_conn, if_exists="append", index=False)
+                clean_df.to_sql("sales_plan_history", p_conn, if_exists="replace", index=False)
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_very_good_usage') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
                 p_conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
@@ -641,13 +640,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20260926_july2609_aug2609"):
+def fetch_history_batch(batch_name, cache_key="v20261005_very_good_usage"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,))
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20260926_july2609_aug2609"):
+def fetch_all_history(cache_key="v20261005_very_good_usage"):
     """Aggressively cache full master dataset read (25,112 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn)
@@ -4837,7 +4836,7 @@ with tab_dash:
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20260926_july2609_aug2609")
+            hist_df = fetch_all_history(cache_key="v20261005_very_good_usage")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
