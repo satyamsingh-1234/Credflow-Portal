@@ -2492,18 +2492,23 @@ def render_dashboard(df_sales, prefix):
         eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
         
     # 4. Usage Health Filter (Strictly filter within current cohort/view)
-    dedup_cohort_cols = ['phone', 'Upload_Batch'] if 'Upload_Batch' in eval_df.columns else ['phone']
+    dedup_cohort_cols = ['phone']
     if usage_filt:
-        latest_per_phone = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first')
+        latest_per_phone = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last')
         valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
         filtered = filtered[filtered['phone'].isin(valid_usage_phones) & filtered['Usage check'].isin(usage_filt)]
         eval_df = eval_df[eval_df['phone'].isin(valid_usage_phones) & eval_df['Usage check'].isin(usage_filt)]
         
-    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
+    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last').copy()
     unique_cx = len(dash_df)
     cp_mask_view = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
     channel_partner = int(cp_mask_view.sum())
     trackable_cx = unique_cx - channel_partner
+
+    # For table display, keep the rows corresponding to each customer's active batch to prevent double rows
+    if 'phone' in filtered.columns and 'Upload_Batch' in filtered.columns:
+        latest_batch_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')[['phone', 'Upload_Batch']]
+        filtered = pd.merge(filtered, latest_batch_per_phone, on=['phone', 'Upload_Batch'], how='inner')
 
     st.markdown(f"""
     <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 16px; margin: 10px 0 16px 0; color: #166534; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
@@ -2535,7 +2540,7 @@ def render_dashboard(df_sales, prefix):
         st.download_button("📥 Export Filtered Data", data=excel_dash, file_name="Dashboard_Filtered_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
     # Compute per-customer stats from eval_df (one record per phone per cohort batch)
-    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='first').copy()
+    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last').copy()
     cp_mask = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
     channel_partner = int(cp_mask.sum())
 
