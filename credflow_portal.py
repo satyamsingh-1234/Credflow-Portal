@@ -2206,7 +2206,7 @@ def prepare_eval_df(df_sales, cache_key="v20261005_clean_734_final"):
         existing_status = str(row.get('Usage check', '')).strip()
         if existing_status == "Proper Usage 🟢" and l_val == "Yes":
             return "Very Good Usage 🌟"
-        if existing_status in ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴"]:
+        if existing_status in ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Channel Partner 🤝", "Not Started / Blank Setup ⚪"]:
             return existing_status
 
         return compute_usage_health(plan_n, c_val, s_val, l_val, ct_val, is_blank_setup=False)
