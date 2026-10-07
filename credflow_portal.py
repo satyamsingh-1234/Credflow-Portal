@@ -2339,7 +2339,7 @@ def render_dashboard(df_sales, prefix):
     if 'Upload_Batch' in df_sales.columns:
         for b in df_sales['Upload_Batch'].dropna().unique():
             b_str = str(b).strip()
-            if b_str and b_str not in ['July.csv', 'Aug.csv', 'nan', 'none', '']:
+            if b_str and b_str not in ['July.csv', 'Aug.csv', 'Sep.csv', 'September.csv', 'nan', 'none', '']:
                 batches_in_data.append(b_str)
 
     dp_opts = [
@@ -2350,6 +2350,7 @@ def render_dashboard(df_sales, prefix):
     dp_opts.extend([
         "July Cohort Data",
         "August Cohort Data",
+        "September Cohort Data",
     ])
     for b in batches_in_data:
         if b != latest_file_name:
@@ -2422,6 +2423,8 @@ def render_dashboard(df_sales, prefix):
                         batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('jul')
                     elif any(k in tb_l for k in ['aug', '082026', 'august']):
                         batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('aug')
+                    elif any(k in tb_l for k in ['sep', '092026', 'september', 'sept']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('sep')
                 filtered = filtered[batch_mask]
                 eval_df = eval_df[batch_mask]
         elif date_preset.startswith("📁 Batch: "):
@@ -2434,6 +2437,8 @@ def render_dashboard(df_sales, prefix):
                         batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('jul')
                     elif any(k in tb_l for k in ['aug', '082026', 'august']):
                         batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('aug')
+                    elif any(k in tb_l for k in ['sep', '092026', 'september', 'sept']):
+                        batch_mask = eval_df['Upload_Batch'].astype(str).str.lower().str.contains('sep')
                 filtered = filtered[batch_mask]
                 eval_df = eval_df[batch_mask]
         elif date_preset == "July Cohort Data" or (date_preset.startswith("July") and not date_preset.startswith("📁")):
@@ -2456,6 +2461,17 @@ def render_dashboard(df_sales, prefix):
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             else:
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
+            filtered = filtered[batch_mask]
+            eval_df = eval_df[batch_mask]
+        elif date_preset == "September Cohort Data" or (date_preset.startswith("September") and not date_preset.startswith("📁")):
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = eval_df['Upload_Batch'].astype(str).apply(
+                    lambda b: any(k in b.strip().lower() for k in ['sep', '092026', 'september', 'sept'])
+                )
+                if not batch_mask.any():
+                    batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 9)
+            else:
+                batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 9)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
         else:
@@ -5231,10 +5247,10 @@ with tab_upload:
 
                     st.markdown("---")
 
-                    extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July' in b or 'july' in b or 'Aug' in b or 'aug' in b or '08092026' in b)]
+                    extra_batches = [b for b in s_batches['Upload_Batch'].tolist() if not ('July' in b or 'july' in b or 'Aug' in b or 'aug' in b or 'Sep' in b or 'sep' in b or '08092026' in b or '092026' in b)]
                     if extra_batches:
-                        with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July & August Baseline Only)"):
-                            st.write(f"The following intermediate batches will be safely removed, keeping **July** and **August** baseline datasets intact:")
+                        with st.expander(f"⚡ One-Click Cleanup: Delete {len(extra_batches)} Extra Intermediate Batches (Keep July, August & September Baseline Only)"):
+                            st.write(f"The following intermediate batches will be safely removed, keeping **July**, **August**, and **September** baseline datasets intact:")
                             for eb in extra_batches:
                                 st.caption(f"&bull; {eb}")
                             if st.button("🗑️ Delete All Intermediate Extra Batches Now", key="btn_cleanup_extra"):
