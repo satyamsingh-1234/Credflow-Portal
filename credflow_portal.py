@@ -86,12 +86,24 @@ try:
         p_cnt = 0
 
     if p_cnt == 0 and os.path.exists(csv_master):
-        clean_df = pd.read_csv(csv_master).drop_duplicates()
+        clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_clean_734_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'aug2609.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Today (26 Sep 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
+    elif os.path.exists(csv_master):
+        try:
+            existing_batches = set(pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history", conn)['Upload_Batch'].dropna().tolist())
+            master_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
+            master_batches = set(master_df['Upload_Batch'].dropna().tolist())
+            missing_batches = master_batches - existing_batches
+            if missing_batches:
+                missing_df = master_df[master_df['Upload_Batch'].isin(missing_batches)]
+                missing_df.to_sql("sales_plan_history", conn, if_exists="append", index=False)
+                conn.commit()
+        except Exception:
+            pass
 
     # Sync any missing interaction records from repo DB to persistent DB if persistent is separate
     if PERSISTENT_DB != REPO_DB and os.path.exists(REPO_DB):
@@ -2339,21 +2351,19 @@ def render_dashboard(df_sales, prefix):
     if 'Upload_Batch' in df_sales.columns:
         for b in df_sales['Upload_Batch'].dropna().unique():
             b_str = str(b).strip()
-            if b_str and b_str not in ['July.csv', 'Aug.csv', 'Sep.csv', 'September.csv', 'nan', 'none', '']:
+            if b_str and b_str not in ['July.csv', 'Aug.csv', 'Sep.csv', 'September.csv', 'july2609.csv', 'aug2609.csv', 'nan', 'none', '']:
                 batches_in_data.append(b_str)
 
     dp_opts = [
-        "Overall Data (All Cohorts Combined)",
-    ]
-    if latest_file_name:
-        dp_opts.append(f"📁 Today / Latest: {latest_file_name}")
-    dp_opts.extend([
-        "July Cohort Data",
-        "August Cohort Data",
+        "🌐 Overall Data (July + Aug + Sep Combined)",
         "September Cohort Data",
-    ])
+        "August Cohort Data",
+        "July Cohort Data",
+    ]
+    if latest_file_name and latest_file_name not in ['September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
+        dp_opts.append(f"📁 Today / Latest: {latest_file_name}")
     for b in batches_in_data:
-        if b != latest_file_name:
+        if b != latest_file_name and b not in ['September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
             dp_opts.append(f"📁 Batch: {b}")
 
     dp_opts.extend([
@@ -4806,15 +4816,17 @@ if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-if st.sidebar.button("🔁 Reset Master Data (355 Aug + 379 July = 734)", use_container_width=True, help="Force reset database to official master: 355 August + 379 July customers"):
+if st.sidebar.button("🔁 Reset Master Baseline (July + August + September = 1,062 CX)", use_container_width=True, help="Force reset database to official master: July, August, and September cohorts"):
     csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
     if os.path.exists(csv_master):
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261005_clean_734_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
         st.cache_data.clear()
-        st.sidebar.success("✅ Database restored to 355 Aug + 379 July!")
+        st.sidebar.success("✅ Database restored to July + August + September (1,062 Customers)!")
         st.rerun()
 
 
@@ -4878,6 +4890,19 @@ with tab_upload:
 
             if action == "📤 Upload New Master Data":
                 st.info("💡 Upload your RAW Sales Data (CSV ya Excel)")
+                cohort_target = st.radio(
+                    "🎯 Select Target Cohort for this Upload:",
+                    [
+                        "🌟 September Cohort (Update / Replace September Data)",
+                        "🌟 August Cohort (Update / Replace August Data)",
+                        "🌟 July Cohort (Update / Replace July Data)",
+                        "📁 Auto-Detect / Other Batch (Auto-assign by file name or dates)"
+                    ],
+                    index=0,
+                    horizontal=True,
+                    key="cohort_upload_target",
+                    help="Chuniye ki ye upload kis cohort ko update karega. Agar September chunenge toh September ka latest data update ho jayega aur July/August bilkul safe rahenge."
+                )
                 uploaded_file = st.file_uploader("📂 Upload Raw Sales Data", type=["csv", "xlsx", "xls", "txt"])
 
                 if uploaded_file:
@@ -5060,8 +5085,31 @@ with tab_upload:
                             out_df = pd.DataFrame(formatted_rows)
 
                             if not out_df.empty:
-                                clean_batch_name = str(uploaded_file.name).strip()
-                                today_dt_str = datetime.now().strftime('%d/%m/%Y')
+                                target_sel = st.session_state.get("cohort_upload_target", "")
+                                if "September" in target_sel:
+                                    clean_batch_name = "September.csv"
+                                    today_dt_str = "15/09/2026"
+                                elif "August" in target_sel:
+                                    clean_batch_name = "aug2609.csv"
+                                    today_dt_str = "15/08/2026"
+                                elif "July" in target_sel:
+                                    clean_batch_name = "july2609.csv"
+                                    today_dt_str = "15/07/2026"
+                                else:
+                                    fn_l = str(uploaded_file.name).lower()
+                                    if any(k in fn_l for k in ['sep', '092026', 'september']):
+                                        clean_batch_name = "September.csv"
+                                        today_dt_str = "15/09/2026"
+                                    elif any(k in fn_l for k in ['aug', '082026', 'august']):
+                                        clean_batch_name = "aug2609.csv"
+                                        today_dt_str = "15/08/2026"
+                                    elif any(k in fn_l for k in ['jul', '072026', 'july']):
+                                        clean_batch_name = "july2609.csv"
+                                        today_dt_str = "15/07/2026"
+                                    else:
+                                        clean_batch_name = str(uploaded_file.name).strip()
+                                        today_dt_str = datetime.now().strftime('%d/%m/%Y')
+
                                 out_df['Upload_Batch'] = clean_batch_name
                                 out_df['Upload_Date'] = today_dt_str
                                 out_df = out_df.astype(str)
@@ -5074,15 +5122,17 @@ with tab_upload:
                                     pass
 
                                 # ── DEDUPLICATED LIVE UPSERT (NO DOUBLE ROWS) ──
-                                # 1. Extract phone numbers from newly uploaded data
                                 phones_in_upload = [str(p).replace('.0', '').strip() for p in out_df['phone'].unique() if str(p).strip()]
 
-                                # 2. Cleanly remove past rows for THESE uploaded customers in THIS batch so re-uploading does not duplicate
-                                if phones_in_upload:
+                                # Cleanly replace previous records for THIS cohort batch so re-uploading keeps the newest data
+                                if clean_batch_name in ['September.csv', 'aug2609.csv', 'july2609.csv']:
+                                    conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (clean_batch_name,))
+                                    conn.commit()
+                                elif phones_in_upload:
                                     conn.executemany("DELETE FROM sales_plan_history WHERE phone = ? AND Upload_Batch = ?", [(p, clean_batch_name) for p in phones_in_upload])
                                     conn.commit()
 
-                                # 3. Insert fresh customer records with updated batch name & today's date
+                                # Insert fresh customer records with updated batch name & date
                                 out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
                                 conn.commit()
 
@@ -5170,13 +5220,14 @@ with tab_upload:
                     if 'upload_success_info' in st.session_state and st.session_state.get('last_processed_file_id') == file_id:
                         info = st.session_state['upload_success_info']
                         st.markdown(f"""
-                        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin-margin: 16px 0;">
+                        <div style="background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 12px; padding: 16px 20px; margin: 16px 0;">
                             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                                 <div>
-                                    <h3 style="margin:0 0 6px 0; color:#166534; font-size:18px;">🎉 Data Successfully Uploaded & Active in Database!</h3>
+                                    <h3 style="margin:0 0 6px 0; color:#166534; font-size:18px;">🎉 Cohort Data Successfully Updated & Active in Database!</h3>
                                     <p style="margin:0; color:#15803D; font-size:14px;">
-                                        📁 Active File: <b>{info.get('file_name')}</b> | 📅 Uploaded: <b>{info.get('upload_time')}</b><br>
-                                        👥 Active Customers: <b>{info.get('unique_cx')}</b> | Clean Rows Saved: <b>{info.get('rows')}</b> (Deduplicated)
+                                        📁 Active Cohort Batch: <b>{info.get('batch')}</b> | 📅 Uploaded: <b>{info.get('upload_time')}</b><br>
+                                        👥 Active Customers in Batch: <b>{info.get('unique_cx')}</b> | Clean Rows Saved: <b>{info.get('rows')}</b><br>
+                                        🛡️ <b>July, August & September datasets remain safely preserved and combined into Overall Data.</b>
                                     </p>
                                 </div>
                                 <div style="background:#10B981; color:white; font-weight:700; padding:6px 16px; border-radius:20px; font-size:13px;">
@@ -5211,36 +5262,37 @@ with tab_upload:
                 import pandas as pd
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
                 if not s_batches.empty:
-                    st.markdown('''
+                    full_master_df = fetch_all_history()
+                    filtered_master, eval_master = prepare_eval_df(full_master_df)
+                    dedup_master = eval_master.drop_duplicates(subset=['phone'], keep='last')
+                    master_total_cnt = len(dedup_master)
+                    excel_backup = to_excel_download(dedup_master, sheet_name="Master_Deduplicated")
+                    csv_backup = dedup_master.to_csv(index=False).encode('utf-8')
+
+                    st.markdown(f'''
                     <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-left: 4px solid #F59E0B; padding: 14px 18px; border-radius: 10px; margin-bottom: 16px;">
-                        <h4 style="margin:0; color:#92400E; font-size:16px;">📥 Master Backup Download Before Deleting Extra Sheets</h4>
+                        <h4 style="margin:0; color:#92400E; font-size:16px;">📥 Master Backup Download ({master_total_cnt} Unique Customers)</h4>
                         <p style="margin:4px 0 0 0; color:#78350F; font-size:13px;">
-                            Download full combined backup of all 727 unique customers across July & August data before deleting extra upload batches.
+                            Download full combined backup of all <b>{master_total_cnt} unique customers</b> across July, August & September baseline datasets before deleting extra intermediate upload batches.
                         </p>
                     </div>
                     ''', unsafe_allow_html=True)
 
-                    full_master_df = fetch_all_history()
-                    filtered_master, eval_master = prepare_eval_df(full_master_df)
-                    dedup_master = eval_master.drop_duplicates(subset=['phone'], keep='last')
-                    excel_backup = to_excel_download(dedup_master, sheet_name="Master_Deduplicated")
-                    csv_backup = dedup_master.to_csv(index=False).encode('utf-8')
-
                     d_c1, d_c2 = st.columns([1, 1])
                     with d_c1:
                         st.download_button(
-                            "📥 Download Master 727 Customers Backup (Excel)",
+                            f"📥 Download Master {master_total_cnt} Customers Backup (Excel)",
                             data=excel_backup,
-                            file_name="CredFlow_Master_Dataset_Backup_727_Customers.xlsx",
+                            file_name=f"CredFlow_Master_Dataset_Backup_{master_total_cnt}_Customers.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True,
                             type="primary"
                         )
                     with d_c2:
                         st.download_button(
-                            "📄 Download Master 727 Customers Backup (CSV)",
+                            f"📄 Download Master {master_total_cnt} Customers Backup (CSV)",
                             data=csv_backup,
-                            file_name="CredFlow_Master_Dataset_Backup_727_Customers.csv",
+                            file_name=f"CredFlow_Master_Dataset_Backup_{master_total_cnt}_Customers.csv",
                             mime="text/csv",
                             use_container_width=True
                         )
