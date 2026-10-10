@@ -5039,19 +5039,9 @@ with tab_upload:
                                 else:
                                     contact_7d = "None"
 
-                                # Auto-detect partner leads from row columns or known partner registry
-                                has_partner_col = any(
-                                    'partner' in str(_get_row_val(row, [c])).lower()
-                                    for c in ['channel partner name', 'channel partner', 'partner', 'contact source', 'notes', 'lead tagging', 'sub stage']
-                                )
-                                if phone_clean_match in CHANNEL_PARTNER_PHONES or has_partner_col:
+                                # Channel Partner is strictly matched against the official Channel Partner phone list
+                                if phone_clean_match in CHANNEL_PARTNER_PHONES:
                                     health_status = "Channel Partner 🤝"
-                                    try:
-                                        conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, tag_source) VALUES (?, ?, ?)", (phone_clean_match, cx_name, "Auto-detected from file upload"))
-                                        conn.commit()
-                                        CHANNEL_PARTNER_PHONES.add(phone_clean_match)
-                                    except Exception:
-                                        pass
                                 elif 'partner client' in cx_name.lower() or phone_clean_match == '9765652885':
                                     health_status = "No Usage 🔴"
                                 elif is_all_three_blank(sync_7d, login_7d, cp_7d):
