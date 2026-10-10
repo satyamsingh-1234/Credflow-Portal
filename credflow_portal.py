@@ -641,13 +641,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20261005_clean_734_final"):
+def fetch_history_batch(batch_name, cache_key="v20261010_master_1062_final"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,)).drop_duplicates()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20261005_clean_734_final"):
+def fetch_all_history(cache_key="v20261010_master_1062_final"):
     """Aggressively cache full master dataset read (5,621 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn).drop_duplicates()
@@ -2144,7 +2144,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20261005_clean_734_final"):
+def prepare_eval_df(df_sales, cache_key="v20261010_master_1062_final"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.drop_duplicates().copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -4853,14 +4853,14 @@ with tab_dash:
         if cur_row_cnt == 0:
             csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
             if os.path.exists(csv_master):
-                clean_df = pd.read_csv(csv_master).drop_duplicates()
+                clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
                 clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
                 conn.commit()
                 st.cache_data.clear()
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20261005_clean_734_final")
+            hist_df = fetch_all_history(cache_key="v20261010_master_1062_final")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
