@@ -847,7 +847,7 @@ st.markdown(f"""
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <div style="background: rgba(37, 99, 235, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); padding: 6px 14px; border-radius: 20px; color: #60A5FA; font-weight: 700; font-size: 12px; display: flex; align-items: center; gap: 6px;">
                 <span style="height: 8px; width: 8px; background-color: #10B981; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #10B981;"></span>
-                Enterprise SaaS Portal v3.0
+                Enterprise SaaS Portal v3.1 • Desktop Tracker Active
             </div>
         </div>
     </div>
