@@ -13,6 +13,7 @@ import urllib.parse
 import json
 import base64
 import requests
+from desktop_version_tracker import render_desktop_version_tracker
 
 logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
 if not os.path.exists(logo_path):
@@ -4830,10 +4831,11 @@ if st.sidebar.button("🔁 Reset Master Baseline (July + August + September = 1,
         st.rerun()
 
 
-tab_dash, tab_weekly, tab_comp, tab_hist, tab_tpl, tab_upload = st.tabs([
+tab_dash, tab_weekly, tab_comp, tab_desktop, tab_hist, tab_tpl, tab_upload = st.tabs([
     "📊 Main Dashboard & CRM",
     "📅 Weekly CP Usage Tracker",
     "⚔️ Compare 2 Batches Studio",
+    "🔄 Desktop App Version Tracker",
     "📜 Outreach & Dispatch History",
     "📝 Outreach Templates Manager",
     "⚙️ Data Management & Uploads"
@@ -4872,6 +4874,10 @@ with tab_weekly:
 with tab_comp:
     with st.spinner("⚔️ Calculating Cohort Comparison & Adoption Growth Rates..."):
         render_batch_comparison(conn)
+
+with tab_desktop:
+    with st.spinner("🔄 Loading Desktop App Version Tracker & Upgrade Studio..."):
+        render_desktop_version_tracker(conn)
 
 with tab_hist:
     with st.spinner("📜 Retrieving WhatsApp & Email Outreach Dispatch Logs..."):
