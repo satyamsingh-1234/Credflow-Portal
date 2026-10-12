@@ -4876,8 +4876,10 @@ with tab_comp:
         render_batch_comparison(conn)
 
 with tab_desktop:
-    with st.spinner("🔄 Loading Desktop App Version Tracker & Upgrade Studio..."):
+    try:
         render_desktop_version_tracker(conn)
+    except Exception as e:
+        st.error(f"Desktop Version Tracker: {e}")
 
 with tab_hist:
     with st.spinner("📜 Retrieving WhatsApp & Email Outreach Dispatch Logs..."):
