@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Desktop App Version Tracker & WhatsApp Upgrade Outreach Module
-Ultra-fast, cached, and crash-proof.
+With Customer Usage Health Integration (Proper / Low / No Usage),
+Ultra-fast caching, and crash-proof execution.
 """
 
 import os
@@ -13,6 +14,7 @@ import urllib.parse
 import pandas as pd
 import streamlit as st
 
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "credflow_history.db")
 EXTRACTED_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "customer_version_detail_extracted.csv")
 
 UPGRADE_TEMPLATE_TEXT = """Dear {customer_name},
@@ -30,14 +32,14 @@ CredFlow Support"""
 
 
 @st.cache_data(show_spinner=False)
-def load_cached_desktop_data():
-    """Loads and prepares desktop version data in-memory with ultra-fast caching."""
+def load_cached_desktop_data_with_usage():
+    """Loads desktop version data and joins customer usage health (Proper/Low/No Usage)."""
     if not os.path.exists(EXTRACTED_CSV):
         return pd.DataFrame()
         
     df = pd.read_csv(EXTRACTED_CSV)
     
-    # Clean phone numbers
+    # Clean phone numbers (standard 10 digits)
     df['phone_clean'] = df['Phone'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     df['phone_clean'] = df['phone_clean'].apply(lambda x: x[-10:] if len(x) > 10 else x)
     
@@ -67,6 +69,45 @@ def load_cached_desktop_data():
     df['env_clean'] = df['Environment'].fillna('Unknown').astype(str).str.strip()
     df['month_clean'] = df['Month'].fillna('').astype(str).str.strip()
     
+    # Fetch Usage Check mapping from database if available
+    usage_map = {}
+    if os.path.exists(DB_PATH):
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            u_df = pd.read_sql('SELECT phone, [Usage check] as usage_val FROM sales_plan_history', conn)
+            conn.close()
+            for _, r in u_df.iterrows():
+                p = str(r['phone']).replace('.0', '').strip()
+                if len(p) > 10: p = p[-10:]
+                if p and p not in usage_map and pd.notna(r['usage_val']):
+                    usage_map[p] = str(r['usage_val']).strip()
+        except Exception:
+            pass
+            
+    def map_health(row):
+        p = row['phone_clean']
+        h = usage_map.get(p, '')
+        if not h or h == 'nan':
+            # Fallback check
+            ver = row['version_clean']
+            if 'Unknown' in ver:
+                return '⚪ Not Started / Sync Pending'
+            return '⚪ Not Tracked in Master'
+        if 'Very Good' in h:
+            return '🌟 Very Good Usage'
+        elif 'Proper' in h:
+            return '🟢 Proper Usage'
+        elif 'Low' in h:
+            return '🟡 Low Usage'
+        elif 'No Usage' in h:
+            return '🔴 No Usage'
+        elif 'Not Started' in h or 'Blank' in h:
+            return '⚪ Not Started / Blank Setup'
+        elif 'Partner' in h:
+            return '🤝 Channel Partner'
+        return h
+
+    df['usage_health'] = df.apply(map_health, axis=1)
     return df
 
 
@@ -149,19 +190,18 @@ def log_upgrade_outreach(conn, phone, customer_name, email, status, error_msg=""
 
 
 def render_desktop_version_tracker(conn):
-    """Renders the Desktop App Version Tracker tab with zero-lag caching."""
+    """Renders the Desktop App Version Tracker tab with Usage Health integration."""
     try:
-        raw_df = load_cached_desktop_data()
+        raw_df = load_cached_desktop_data_with_usage()
         if raw_df.empty:
-            st.warning("⚠️ Desktop version data file not found. Please verify repository files.")
+            st.warning("⚠️ Desktop version data file not found.")
             return
 
         st.markdown("""
         <div style="background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%); padding: 18px 22px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 20px;">
             <h2 style="color: #38BDF8; margin: 0 0 6px 0; font-size: 22px; font-weight: 700;">🔄 Desktop App Version Tracker & Upgrade Studio</h2>
             <p style="color: #94A3B8; margin: 0; font-size: 13.5px;">
-                Tracking desktop software versions for <b>July, August, and September</b> customer cohorts from the official master Google Sheet.
-                Easily identify customers on outdated Tally/Busy versions and send 1-click WhatsApp upgrade links via Interakt API.
+                Tracking desktop software versions with <b>Live Customer Usage Health (Proper 🟢 / Low 🟡 / No Usage 🔴)</b> across July, August, and September cohorts.
             </p>
             <div style="display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap;">
                 <span style="background: #064E3B; color: #6EE7B7; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #059669;">
@@ -171,14 +211,14 @@ def render_desktop_version_tracker(conn):
                     🟢 Latest Busy: 3.6.12_busy
                 </span>
                 <span style="background: #7F1D1D; color: #FCA5A5; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid #DC2626;">
-                    🔴 Outdated / Old Versions: Requires Upgrade Message
+                    🔴 Outdated Versions: Requires Upgrade Message
                 </span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        # Top Filter Bar
-        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+        # Top Filter Bar (5 Columns)
+        f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
         with f_col1:
             month_options = ["All Months (Overall)"] + sorted([m for m in raw_df['month_clean'].unique() if m])
             sel_month = st.selectbox("📅 Cohort Month", month_options, index=0, key="dsk_sel_month")
@@ -192,8 +232,19 @@ def render_desktop_version_tracker(conn):
             sel_env = st.selectbox("☁️ Environment", env_options, index=0, key="dsk_sel_env")
             
         with f_col4:
-            status_options = ["All Customers", "🔴 Needs Upgrade Only", "🟢 Latest Version Only", "⚪ Unknown / Broken Sync"]
+            status_options = ["All Versions", "🔴 Needs Upgrade Only", "🟢 Latest Version Only", "⚪ Unknown / Broken Sync"]
             sel_status = st.selectbox("🏷️ Version Status", status_options, index=0, key="dsk_sel_status")
+
+        with f_col5:
+            health_options = [
+                "All Usage Types",
+                "🟢 Proper Usage",
+                "🌟 Very Good Usage",
+                "🟡 Low Usage",
+                "🔴 No Usage",
+                "⚪ Not Started / Sync Pending"
+            ]
+            sel_health = st.selectbox("🚦 Usage Health", health_options, index=0, key="dsk_sel_health")
 
         # Search Bar
         search_query = st.text_input("🔍 Search by Customer Name, Company, Phone, or Version:", placeholder="e.g. Mangilia, 9443344881, 2.0.1_tally, etc.", key="dsk_search_query")
@@ -216,6 +267,9 @@ def render_desktop_version_tracker(conn):
         elif sel_status == "⚪ Unknown / Broken Sync":
             filtered_df = filtered_df[filtered_df['version_clean'] == 'Unknown / Not found']
 
+        if sel_health != "All Usage Types":
+            filtered_df = filtered_df[filtered_df['usage_health'].str.contains(sel_health.split()[1], na=False)]
+
         if search_query.strip():
             q = search_query.strip().lower()
             mask = (
@@ -230,22 +284,24 @@ def render_desktop_version_tracker(conn):
         total_cx = len(filtered_df)
         latest_cx = len(filtered_df[filtered_df['is_latest_version'] == 1])
         needs_upgrade_cx = len(filtered_df[(filtered_df['is_latest_version'] == 0) & (filtered_df['version_clean'] != 'Unknown / Not found')])
-        unknown_cx = len(filtered_df[filtered_df['version_clean'] == 'Unknown / Not found'])
+        
+        # Usage breakdown
+        proper_cnt = len(filtered_df[filtered_df['usage_health'].str.contains('Proper|Very Good', na=False)])
+        low_cnt = len(filtered_df[filtered_df['usage_health'].str.contains('Low', na=False)])
+        no_cnt = len(filtered_df[filtered_df['usage_health'].str.contains('No Usage', na=False)])
 
-        pct_latest = (latest_cx / total_cx * 100) if total_cx > 0 else 0
-        pct_upgrade = (needs_upgrade_cx / total_cx * 100) if total_cx > 0 else 0
-        pct_unknown = (unknown_cx / total_cx * 100) if total_cx > 0 else 0
-
-        st.markdown("### 📊 Version Health Overview")
-        m1, m2, m3, m4 = st.columns(4)
+        st.markdown("### 📊 Version & Usage Health Overview")
+        m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
             st.metric("👥 Total Customers", f"{total_cx:,}")
         with m2:
-            st.metric("🟢 Updated / Latest Version", f"{latest_cx:,}", f"{pct_latest:.1f}% of cohort")
+            st.metric("🟢 Latest Versions", f"{latest_cx:,}", f"{(latest_cx/total_cx*100 if total_cx else 0):.1f}%")
         with m3:
-            st.metric("🔴 Needs Upgrade", f"{needs_upgrade_cx:,}", f"{pct_upgrade:.1f}% require update", delta_color="inverse")
+            st.metric("🔴 Needs Upgrade", f"{needs_upgrade_cx:,}", f"{(needs_upgrade_cx/total_cx*100 if total_cx else 0):.1f}%", delta_color="inverse")
         with m4:
-            st.metric("⚪ Unknown / Broken Sync", f"{unknown_cx:,}", f"{pct_unknown:.1f}% of cohort", delta_color="off")
+            st.metric("🟢 Proper Usage CX", f"{proper_cnt:,}")
+        with m5:
+            st.metric("🟡 Low / 🔴 No Usage", f"{low_cnt + no_cnt:,}", f"{low_cnt} Low | {no_cnt} No")
 
         st.markdown("---")
 
@@ -257,36 +313,38 @@ def render_desktop_version_tracker(conn):
         ])
 
         with sub_tab1:
-            st.markdown("#### 📊 Version Distribution & Environment Breakdown")
-            st.caption("Aggregated summary matching Google Sheet Synopsis (Local vs Cloud vs Unknown)")
+            st.markdown("#### 📊 Version Distribution & Usage Health Breakdown")
+            st.caption("Aggregated summary showing Environment (Local vs Cloud) and Customer Usage Health (Proper vs Low vs No Usage)")
             
             piv = filtered_df.groupby(['version_clean', 'software_type']).agg(
                 Total=('phone_clean', 'count'),
                 Local=('env_clean', lambda x: (x == 'Local').sum()),
                 Cloud=('env_clean', lambda x: (x == 'Cloud').sum()),
-                Unknown=('env_clean', lambda x: (x == 'Unknown').sum()),
+                Proper_Usage=('usage_health', lambda x: x.str.contains('Proper|Very Good', na=False).sum()),
+                Low_Usage=('usage_health', lambda x: x.str.contains('Low', na=False).sum()),
+                No_Usage=('usage_health', lambda x: x.str.contains('No Usage', na=False).sum()),
                 Is_Latest=('is_latest_version', 'max')
             ).reset_index().sort_values(by='Total', ascending=False)
             
-            piv['Status'] = piv['Is_Latest'].apply(lambda x: '🟢 Updated / Latest' if x == 1 else '🔴 Old / Upgrade Needed')
-            piv.loc[piv['version_clean'] == 'Unknown / Not found', 'Status'] = '⚪ Unknown / Not Synced'
+            piv['Status'] = piv['Is_Latest'].apply(lambda x: '🟢 Latest' if x == 1 else '🔴 Needs Upgrade')
+            piv.loc[piv['version_clean'] == 'Unknown / Not found', 'Status'] = '⚪ Not Synced'
             
-            disp_piv = piv[['version_clean', 'software_type', 'Status', 'Local', 'Cloud', 'Unknown', 'Total']]
-            disp_piv.columns = ['Desktop App Version', 'Software', 'Status', 'Local Users', 'Cloud Users', 'Unknown Env', 'Total Customers']
+            disp_piv = piv[['version_clean', 'software_type', 'Status', 'Local', 'Cloud', 'Proper_Usage', 'Low_Usage', 'No_Usage', 'Total']]
+            disp_piv.columns = ['Desktop Version', 'Software', 'Version Status', 'Local', 'Cloud', 'Proper 🟢', 'Low 🟡', 'No Usage 🔴', 'Total Customers']
             st.dataframe(disp_piv, use_container_width=True, hide_index=True)
 
         with sub_tab2:
             st.markdown(f"#### 👥 Customer Records ({total_cx:,} Found)")
             
-            display_df = filtered_df[['month_clean', 'customer_name_clean', 'company_clean', 'phone_clean', 'version_clean', 'software_type', 'env_clean', 'is_latest_version']].copy()
-            display_df['Upgrade Status'] = display_df['is_latest_version'].apply(lambda x: '🟢 Latest' if x == 1 else '🔴 Needs Upgrade')
-            display_df.loc[display_df['version_clean'] == 'Unknown / Not found', 'Upgrade Status'] = '⚪ Unknown'
+            display_df = filtered_df[['month_clean', 'customer_name_clean', 'company_clean', 'phone_clean', 'version_clean', 'software_type', 'env_clean', 'usage_health', 'is_latest_version']].copy()
+            display_df['Version Status'] = display_df['is_latest_version'].apply(lambda x: '🟢 Latest' if x == 1 else '🔴 Needs Upgrade')
+            display_df.loc[display_df['version_clean'] == 'Unknown / Not found', 'Version Status'] = '⚪ Unknown'
             
-            # Lightweight clean link
+            # Direct WhatsApp link
             display_df['Direct WhatsApp'] = display_df['phone_clean'].apply(lambda p: f"https://wa.me/91{p}" if p and p != 'nan' else "")
             
-            clean_disp = display_df[['month_clean', 'customer_name_clean', 'company_clean', 'phone_clean', 'software_type', 'version_clean', 'env_clean', 'Upgrade Status', 'Direct WhatsApp']]
-            clean_disp.columns = ['Month', 'Customer Name', 'Company', 'Phone', 'Software', 'App Version', 'Environment', 'Status', '1-Click WA']
+            clean_disp = display_df[['month_clean', 'customer_name_clean', 'company_clean', 'phone_clean', 'software_type', 'version_clean', 'env_clean', 'usage_health', 'Version Status', 'Direct WhatsApp']]
+            clean_disp.columns = ['Month', 'Customer Name', 'Company', 'Phone', 'Software', 'Desktop Version', 'Environment', 'Usage Health 🚦', 'Status', '1-Click WA']
             
             st.dataframe(
                 clean_disp,
@@ -327,6 +385,7 @@ def render_desktop_version_tracker(conn):
                 st.write(f"• **Customers Needing Upgrade in current filter:** `{len(upgrade_targets):,}`")
                 st.write(f"• **Current Month Cohort:** `{sel_month}`")
                 st.write(f"• **Software Type:** `{sel_sw}`")
+                st.write(f"• **Usage Health Filter:** `{sel_health}`")
                 
                 st.markdown("#### 🧪 Test Single Number")
                 test_phone = st.text_input("Enter 10-digit mobile number for test:", placeholder="9876543210", key="dsk_test_phone")
@@ -377,7 +436,7 @@ def render_desktop_version_tracker(conn):
                             else:
                                 fail_count += 1
                                 log_upgrade_outreach(conn, p, cname, email, "Failed", str(resp))
-                                
+                            
                             progress_bar.progress((idx + 1) / total)
                             status_text.text(f"Processed {idx + 1}/{total} | ✅ Success: {success_count} | ❌ Failed: {fail_count}")
                             

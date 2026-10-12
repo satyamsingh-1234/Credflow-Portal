@@ -847,7 +847,7 @@ st.markdown(f"""
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             <div style="background: rgba(37, 99, 235, 0.2); border: 1px solid rgba(59, 130, 246, 0.4); padding: 6px 14px; border-radius: 20px; color: #60A5FA; font-weight: 700; font-size: 12px; display: flex; align-items: center; gap: 6px;">
                 <span style="height: 8px; width: 8px; background-color: #10B981; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px #10B981;"></span>
-                Enterprise SaaS Portal v3.1 • Desktop Tracker Active
+                Enterprise SaaS Portal v3.2 • Operations Active
             </div>
         </div>
     </div>
@@ -2704,22 +2704,6 @@ def render_dashboard(df_sales, prefix):
 
     st.markdown("---")
 
-    # ── ISSUE SUMMARY ON DASHBOARD ──
-    issue_summary_dash = pd.read_sql("SELECT issue_type, COUNT(*) as count FROM customer_interactions WHERE issue_type IS NOT NULL AND issue_type != '' GROUP BY issue_type ORDER BY count DESC", conn)
-    if not issue_summary_dash.empty:
-        st.markdown("### 🏷️ Customer Issue Tracker Summary")
-        iss_c1, iss_c2 = st.columns([2, 1])
-        with iss_c1:
-            fig_issues_dash = px.bar(issue_summary_dash, x='issue_type', y='count', title="Issue Type Breakdown",
-                              labels={'issue_type': 'Issue Type', 'count': 'Customers'},
-                              color='issue_type', color_discrete_sequence=px.colors.qualitative.Set2)
-            fig_issues_dash.update_layout(height=350, margin=dict(t=40, b=20, l=20, r=20), showlegend=False)
-            st.plotly_chart(fig_issues_dash, use_container_width=True)
-        with iss_c2:
-            st.dataframe(issue_summary_dash.rename(columns={'issue_type': 'Issue Type 🏷️', 'count': 'Customers 👥'}), use_container_width=True, hide_index=True)
-            total_issues = issue_summary_dash['count'].sum()
-            st.metric("📋 Total Issues Logged", total_issues)
-
     st.markdown("---")
     # ── END OVERALL DASHBOARD ──────────────────────────────────────────
 
@@ -2866,8 +2850,7 @@ def render_crm(cx_df):
     # ──────────────────────────────────────────────────────────────
 
     st.markdown("---")
-    st.markdown("### 📞 Interactive Telecalling CRM")
-    st.info("⚡ **Auto-Save Enabled!** Aap is table mein kuch bhi edit (tick/type) karenge, toh woh immediately automatic save ho jayega.")
+    st.markdown("### 👥 Customer Operations & CRM Registry")
 
     # ── NO USAGE SUPPORT TICKET DESK ──
     no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
@@ -2971,102 +2954,6 @@ def render_crm(cx_df):
                 else:
                     st.error(f"❌ Failed to send tickets: {failed}")
 
-    # ── QUICK CALLBACK SCHEDULER & SUPPORT ALERT ──
-    with st.expander("⏰ Schedule Customer Callback & Auto Alert Support (1-Click Notification)", expanded=False):
-        st.caption("Jab customer bole ki 'mujhko X baje call karna', tab yahan se customer select karke date, time aur remarks dalein. Remarks auto-generate hongi aur support@credflow.in ko notification mail chala jayega.")
-        
-        all_cx_names = cx_df[['Name', 'phone', 'email', 'plan name']].drop_duplicates(subset=['phone'], keep='last').to_dict('records') if not cx_df.empty else []
-        cx_options = [f"{r.get('Name', 'Unknown')} ({r.get('phone', '')})" for r in all_cx_names]
-        
-        cb_col1, cb_col2, cb_col3, cb_col4 = st.columns([3, 2, 2, 3])
-        with cb_col1:
-            sel_cx_str = st.selectbox("👤 Select Customer", options=cx_options if cx_options else ["No Customers Loaded"], key="cb_cx_select")
-        with cb_col2:
-            cb_date = st.date_input("📅 Callback Date", value=date.today(), key="cb_date_input")
-        with cb_col3:
-            cb_time_str = st.text_input("⏰ Callback Time", value="4:00 PM", key="cb_time_input")
-        with cb_col4:
-            cb_agent_email = st.text_input("📧 Your Email (Added in CC & Reply-To)", value="satyam.kumar@credflow.in", placeholder="e.g. satyam.kumar@credflow.in", key="cb_agent_email_input")
-            
-        cb_rem = st.text_area("📝 Customer Request Notes / Remarks", placeholder="Customer asked to call back regarding Tally sync setup after 4 PM...", key="cb_remarks_input")
-        
-        if st.button("🔔 Schedule Callback & Email Alert", type="primary", use_container_width=True, key="btn_schedule_cb"):
-            if not cx_options or sel_cx_str == "No Customers Loaded":
-                st.warning("Pehle Master Data upload ya select karein.")
-            else:
-                selected_cx_obj = next((r for r in all_cx_names if f"{r.get('Name', '')} ({r.get('phone', '')})" == sel_cx_str), None)
-                if selected_cx_obj:
-                    cx_p = str(selected_cx_obj.get('phone', '')).replace('.0', '').strip()
-                    cx_n = str(selected_cx_obj.get('Name', ''))
-                    cx_e = str(selected_cx_obj.get('email', ''))
-                    cx_plan = str(selected_cx_obj.get('plan name', ''))
-                    
-                    full_remark = f"⏰ [Callback Scheduled: {cb_date} at {cb_time_str}] {cb_rem}".strip()
-                    date_str = str(cb_date)
-                    
-                    # Update SQLite DB
-                    conn.execute('''
-                        INSERT INTO customer_interactions (phone, call_status, remarks, follow_up)
-                        VALUES (?, 'Call Back Requested', ?, ?)
-                        ON CONFLICT(phone) DO UPDATE SET
-                            call_status='Call Back Requested',
-                            remarks=?,
-                            follow_up=?
-                    ''', (cx_p, full_remark, date_str, full_remark, date_str))
-                    conn.commit()
-                    
-                    # Send Support Email Alert with Agent Reply-To
-                    succ_mail, msg_mail = send_callback_support_email(cx_n, cx_p, cx_e, cx_plan, date_str, full_remark, cb_time_str, agent_email=cb_agent_email)
-                    
-                    if succ_mail:
-                        st.success(f"✅ Callback scheduled for {cx_n} on {date_str} at {cb_time_str}! Notification email dispatched (Customer in TO, Support in CC, Reply-To: {cb_agent_email or 'support@credflow.in'}).")
-                    else:
-                        st.warning(f"✅ Callback saved to DB! (Email alert note: {msg_mail})")
-                    st.rerun()
-
-    # ── ISSUE TYPES MANAGER ──
-    with st.expander("🏷️ Manage Issue Types (Add / Remove your custom issue categories)", expanded=False):
-        st.caption("Yahan aap apne custom Issue Types add/remove kar sakte hain. Ye options CRM table ke 'Issue Type' dropdown mein dikhenge.")
-        existing_issues = [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()]
-        
-        mgr_c1, mgr_c2 = st.columns([3, 1])
-        with mgr_c1:
-            new_issue = st.text_input("➕ Add New Issue Type", placeholder="e.g. Sync Issue, App Crash, Feature Request...", key="new_issue_input")
-        with mgr_c2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("➕ Add Issue Type", type="primary", use_container_width=True, key="btn_add_issue"):
-                if new_issue and new_issue.strip():
-                    try:
-                        conn.execute("INSERT INTO issue_types (issue_name) VALUES (?)", (new_issue.strip(),))
-                        conn.commit()
-                        st.success(f"✅ '{new_issue.strip()}' added!")
-                        st.rerun()
-                    except:
-                        st.warning("⚠️ This issue type already exists!")
-                else:
-                    st.warning("Please enter an issue type name.")
-        
-        if existing_issues:
-            st.markdown("**Current Issue Types:**")
-            issue_cols = st.columns(min(len(existing_issues), 4))
-            for i, iss in enumerate(existing_issues):
-                with issue_cols[i % 4]:
-                    if st.button(f"❌ {iss}", key=f"del_issue_{i}", use_container_width=True):
-                        conn.execute("DELETE FROM issue_types WHERE issue_name = ?", (iss,))
-                        conn.commit()
-                        st.rerun()
-
-    # ── ISSUE SUMMARY DASHBOARD ──
-    issue_summary = pd.read_sql("SELECT issue_type, COUNT(*) as count FROM customer_interactions WHERE issue_type IS NOT NULL AND issue_type != '' GROUP BY issue_type ORDER BY count DESC", conn)
-    if not issue_summary.empty:
-        with st.expander("📊 Issue Type Summary (All Customers)", expanded=False):
-            fig_issues = px.bar(issue_summary, x='issue_type', y='count', title="Customer Issues Breakdown",
-                              labels={'issue_type': 'Issue Type', 'count': 'Customers'},
-                              color='issue_type', color_discrete_sequence=px.colors.qualitative.Set2)
-            fig_issues.update_layout(height=350, margin=dict(t=40, b=20, l=20, r=20), showlegend=False)
-            st.plotly_chart(fig_issues, use_container_width=True)
-            st.dataframe(issue_summary.rename(columns={'issue_type': 'Issue Type 🏷️', 'count': 'Customers 👥'}), use_container_width=True, hide_index=True)
-
     def get_base_credits(plan_name):
         pn = str(plan_name).upper()
         if 'BVP' in pn: return 10000
@@ -3151,7 +3038,7 @@ def render_crm(cx_df):
             'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Call Status', 'Issue Type', 'Plan of Action', 'Remarks', 'Call Date']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Remarks']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -3159,7 +3046,6 @@ def render_crm(cx_df):
         wa_opts = ["All", "Sent ✅", "Not Sent ❌"]
         fwa_opts = ["All", "Sent ✅", "Not Sent ❌"]
         em_opts = ["All", "Sent ✅", "Not Sent ❌"]
-        dt_opts = ["All Dates 🌐", "Today 📌", "Tomorrow ⏩", "Overdue / Missed ⚠️", "Has Follow-up Set 📅", "No Follow-up 🚫", "Custom Date Range 📆"]
 
         if "flt_wa" not in st.session_state:
             q_wa = st.query_params.get("q_flt_wa", wa_opts[0])
@@ -3173,31 +3059,14 @@ def render_crm(cx_df):
             q_em = st.query_params.get("q_flt_em", em_opts[0])
             st.session_state["flt_em"] = q_em if q_em in em_opts else em_opts[0]
 
-        if "flt_date" not in st.session_state:
-            q_dt = st.query_params.get("q_flt_date", dt_opts[0])
-            st.session_state["flt_date"] = q_dt if q_dt in dt_opts else dt_opts[0]
-
-        # --- New WA, Email & Date Filters ---
-        filt_c1, filt_c2, filt_c3, filt_c4 = st.columns(4)
+        # --- Filters ---
+        filt_c1, filt_c2, filt_c3 = st.columns(3)
         with filt_c1:
             wa_filter = st.selectbox("🎯 Filter by WA API Sent", wa_opts, key="flt_wa")
         with filt_c2:
             free_wa_filter = st.selectbox("🎯 Filter by Free WA Sent", fwa_opts, key="flt_fwa")
         with filt_c3:
             em_filter = st.selectbox("🎯 Filter by Email Sent", em_opts, key="flt_em")
-        with filt_c4:
-            date_filter = st.selectbox("📅 Filter by Call Date", dt_opts, key="flt_date")
-
-        # Commented out because modifying global query_params triggers a full app rerun instead of just the fragment
-        # if wa_filter != q_wa: st.query_params["q_flt_wa"] = wa_filter
-        # if free_wa_filter != q_fwa: st.query_params["q_flt_fwa"] = free_wa_filter
-        # if em_filter != q_em: st.query_params["q_flt_em"] = em_filter
-        # if date_filter != q_dt: st.query_params["q_flt_date"] = date_filter
-
-        custom_date_range = None
-        if date_filter == "Custom Date Range 📆":
-            today_d = date.today()
-            custom_date_range = st.date_input("🗓️ Select Date Range (Start & End)", value=(today_d, today_d + timedelta(days=7)), key="flt_custom_dates")
 
         if wa_filter == "Not Sent ❌" or free_wa_filter == "Not Sent ❌" or em_filter == "Not Sent ❌":
             st.caption("💡 **Filter Active Note**: Jab aap किसी customer ko table mein 'Sent ✅' (WA/Email) mark karenge ya Bulk Send karenge, toh wo automatic 'Not Sent ❌' list se nikal kar 'Sent ✅' category mein move ho jayenge.")
@@ -3216,25 +3085,6 @@ def render_crm(cx_df):
             ui_df = ui_df[ui_df['📨 Email Sent'] == True]
         elif em_filter == "Not Sent ❌":
             ui_df = ui_df[ui_df['📨 Email Sent'] == False]
-
-        # --- Date Filter Logic ---
-        today_val = date.today()
-        tomorrow_val = today_val + timedelta(days=1)
-        f_dates = pd.to_datetime(ui_df['Call Date'], errors='coerce').dt.date
-
-        if date_filter == "Today 📌":
-            ui_df = ui_df[f_dates == today_val]
-        elif date_filter == "Tomorrow ⏩":
-            ui_df = ui_df[f_dates == tomorrow_val]
-        elif date_filter == "Overdue / Missed ⚠️":
-            ui_df = ui_df[(f_dates < today_val) & (f_dates.notna())]
-        elif date_filter == "Has Follow-up Set 📅":
-            ui_df = ui_df[f_dates.notna()]
-        elif date_filter == "No Follow-up 🚫":
-            ui_df = ui_df[f_dates.isna()]
-        elif date_filter == "Custom Date Range 📆" and isinstance(custom_date_range, (list, tuple)) and len(custom_date_range) == 2:
-            s_d, e_d = custom_date_range
-            ui_df = ui_df[(f_dates >= s_d) & (f_dates <= e_d)]
         # -----------------------------
         ui_df = ui_df.reset_index(drop=True)
 
@@ -3324,23 +3174,7 @@ def render_crm(cx_df):
                     options=all_status_opts,
                     width="medium"
                 ),
-                "Call Status": st.column_config.SelectboxColumn(
-                    "Call Status 📞",
-                    options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
-                    width="medium"
-                ),
-                "Issue Type": st.column_config.SelectboxColumn(
-                    "Issue Type 🏷️",
-                    options=[""] + [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()],
-                    width="medium"
-                ),
-                "Plan of Action": st.column_config.SelectboxColumn(
-                    "Plan of Action 🎯",
-                    options=all_poa_opts,
-                    width="medium"
-                ),
-                "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
-                "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
+                "Remarks": st.column_config.TextColumn("Remarks 📝", width="large")
             },
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
@@ -3488,28 +3322,25 @@ def render_crm(cx_df):
                     else:
                         st.error(f"Failed to send emails: {result}")
 
-        # ── AUTO-SAVE LOGIC (SQLite Database) ──
-        # Check Streamlit data_editor session state to ensure user actually edited cells
+        # ── MANUAL SAVE CRM CHANGES BUTTON ──
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_sv1, col_sv2 = st.columns([3, 7])
+        with col_sv1:
+            save_crm_btn = st.button("💾 Save CRM Changes to Database", type="primary", use_container_width=True, key="btn_save_crm_manual_edits")
+
         editor_state = st.session_state.get(editor_key, {})
         user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
 
         diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
         diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
         diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
-        diff_status = ui_display_df['Call Status'].fillna('').astype(str).str.strip() != edited_df['Call Status'].fillna('').astype(str).str.strip()
         diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_issue = ui_display_df['Issue Type'].fillna('').astype(str).str.strip() != edited_df['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in ui_display_df.columns and 'Issue Type' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_poa = ui_display_df['Plan of Action'].fillna('').astype(str).str.strip() != edited_df['Plan of Action'].fillna('').astype(str).str.strip() if 'Plan of Action' in ui_display_df.columns and 'Plan of Action' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
         diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
         diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
 
-        f_ui = ui_display_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in ui_display_df.columns else pd.Series('', index=ui_display_df.index)
-        f_ed = edited_df['Call Date'].astype(str).str.strip().replace({'None': '', 'nan': '', 'NaT': ''}) if 'Call Date' in edited_df.columns else pd.Series('', index=edited_df.index)
-        diff_follow = f_ui != f_ed
+        diff = diff_wa | diff_fwa | diff_em | diff_status_upd | diff_remarks | diff_credits
 
-        diff = diff_wa | diff_fwa | diff_em | diff_status | diff_status_upd | diff_issue | diff_poa | diff_remarks | diff_credits | diff_follow
-
-        if bool(user_edited_rows) or diff.any():
+        if save_crm_btn:
             user_keys_int = []
             for k in user_edited_rows.keys():
                 try:
@@ -3523,45 +3354,30 @@ def render_crm(cx_df):
                 for idx, row in changed_rows.iterrows():
                     p = str(row.get('phone', '')).replace('.0', '').strip()
                     if not p: continue
-                    w = 1 if row['✅ WA Sent'] else 0
-                    fw = 1 if row['✅ Free WA Sent'] else 0
-                    c = str(row.get('Call Status', ''))
-                    su = str(row.get('Status Update', ''))
-                    it = str(row.get('Issue Type', ''))
-                    poa = str(row.get('Plan of Action', ''))
-                    r = str(row['Remarks'])
-                    f_val = row.get('Call Date', None)
-                    f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
-                    e = 1 if row['📨 Email Sent'] else 0
-                    ec = int(row['Extra Credits']) if str(row['Extra Credits']).strip() not in ['', 'nan', 'None'] else 0
+                    w = 1 if row.get('✅ WA Sent', False) else 0
+                    fw = 1 if row.get('✅ Free WA Sent', False) else 0
+                    e = 1 if row.get('📨 Email Sent', False) else 0
+                    su = str(row.get('Status Update', '')).strip()
+                    r = str(row.get('Remarks', '')).strip()
+                    ec = int(row['Extra Credits']) if str(row.get('Extra Credits', '')).strip() not in ['', 'nan', 'None'] else 0
 
-                    # ── AUTO REMARK & EMAIL ALERT ON CALLBACK REQUEST ──
-                    if (c in ["Call Back Requested", "Call Later"] or su in ["Call Back Requested", "Call Later"]):
-                        if "⏰" not in r:
-                            r = f"⏰ [Callback Requested: {f or 'Set Date'}] {r}".strip()
-                        # Trigger automated email alert to support@credflow.in if status just changed
-                        if (diff_status.loc[idx] if idx in diff_status.index else False) or (diff_status_upd.loc[idx] if idx in diff_status_upd.index else False):
-                            cx_name = str(row.get('Name', 'Customer'))
-                            cx_email = str(row.get('email', ''))
-                            plan_name = str(row.get('plan name', ''))
-                            succ_mail, _ = send_callback_support_email(cx_name, p, cx_email, plan_name, f, r)
-                            if succ_mail:
-                                st.toast(f"📧 Callback Alert sent to support@credflow.in for {cx_name}!", icon="⏰")
-
-                    has_activity = bool(c or su or it or poa or r or f)
-                    now_call_at = datetime.now().strftime("%Y-%m-%d") if has_activity else ""
-                    # Fetch previous last_call_at if present
-                    curr_row = conn.execute("SELECT last_call_at FROM customer_interactions WHERE phone = ?", (p,)).fetchone()
-                    prev_last_call = curr_row[0] if (curr_row and curr_row[0]) else ""
-                    final_last_call = now_call_at if (has_activity and not prev_last_call) else (now_call_at if has_activity else prev_last_call)
-
-                    conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
                     conn.execute('''
-                        INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, extra_credits, last_call_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (p, w, fw, e, c, su, it, poa, r, f, ec, final_last_call))
+                        INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, status_update, remarks, extra_credits)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(phone) DO UPDATE SET
+                            wa_sent = excluded.wa_sent,
+                            free_wa_sent = excluded.free_wa_sent,
+                            email_sent = excluded.email_sent,
+                            status_update = excluded.status_update,
+                            remarks = excluded.remarks,
+                            extra_credits = excluded.extra_credits
+                    ''', (p, w, fw, e, su, r, ec))
                 conn.commit()
-                st.toast("✅ Auto-saved changes to database!", icon="💾")
+                st.success(f"✅ Successfully saved {len(edited_indices)} customer changes to database!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.info("ℹ️ No modified rows detected to save.")
 def render_telecalling_analytics(conn):
     pass
 
