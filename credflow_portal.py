@@ -3038,7 +3038,7 @@ def render_crm(cx_df):
             'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update', 'Remarks']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -3173,8 +3173,7 @@ def render_crm(cx_df):
                     "Status Update 📢",
                     options=all_status_opts,
                     width="medium"
-                ),
-                "Remarks": st.column_config.TextColumn("Remarks 📝", width="large")
+                )
             },
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
@@ -3546,8 +3545,8 @@ def render_batch_comparison(conn):
     m_col2.error(f"⚠️ **{len(degraded)} Customers Degraded (Usage Dropped 🔴)**")
 
     if not upgraded.empty:
-        with st.expander("🟢 View Upgraded Customers List (Editable Notes & Call Status)", expanded=False):
-            upg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Call Date']
+        with st.expander("🟢 View Upgraded Customers List", expanded=False):
+            upg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)']
             upg_df_export = upgraded.reset_index(drop=True)
             
             # Select All Checkboxes
@@ -3571,19 +3570,7 @@ def render_batch_comparison(conn):
                 column_config={
                     "📩 Send API": st.column_config.CheckboxColumn("📩 Send API", default=False),
                     "📨 Send Email": st.column_config.CheckboxColumn("📨 Send Email", default=False),
-                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
-                    "Call Status": st.column_config.SelectboxColumn(
-                        "Call Status 📞",
-                        options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
-                        width="medium"
-                    ),
-                    "Issue Type": st.column_config.SelectboxColumn(
-                        "Issue Type 🏷️",
-                        options=[""] + [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()],
-                        width="medium"
-                    ),
-                    "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
-                    "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
+                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False)
                 },
                 disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)"]
             )
@@ -3746,8 +3733,8 @@ def render_batch_comparison(conn):
                 st.toast("✅ Auto-saved!", icon="💾")
 
     if not degraded.empty:
-        with st.expander("🔴 View Degraded Customers List (Editable Notes & Call Status)", expanded=False):
-            deg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)', 'Call Status', 'Issue Type', 'Remarks', 'Call Date']
+        with st.expander("🔴 View Degraded Customers List", expanded=False):
+            deg_cols = ['Name', 'phone', 'email', 'plan name', 'Usage check (Batch A)', 'Usage check (Batch B)']
             deg_df_export = degraded.reset_index(drop=True)
             
             # Select All Checkboxes
@@ -3771,19 +3758,7 @@ def render_batch_comparison(conn):
                 column_config={
                     "📩 Send API": st.column_config.CheckboxColumn("📩 Send API", default=False),
                     "📨 Send Email": st.column_config.CheckboxColumn("📨 Send Email", default=False),
-                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
-                    "Call Status": st.column_config.SelectboxColumn(
-                        "Call Status 📞",
-                        options=["", "Connected", "Not Picked", "Switched Off", "Invalid Number", "Call Later", "Interested", "Not Interested", "Busy", "Ringing", "Call Back Requested", "Converted", "Payment Pending", "Payment Not Verified"],
-                        width="medium"
-                    ),
-                    "Issue Type": st.column_config.SelectboxColumn(
-                        "Issue Type 🏷️",
-                        options=[""] + [r[0] for r in conn.execute("SELECT issue_name FROM issue_types ORDER BY issue_name").fetchall()],
-                        width="medium"
-                    ),
-                    "Remarks": st.column_config.TextColumn("Remarks 📝", width="large"),
-                    "Call Date": st.column_config.DateColumn("Call Date 📅", format="DD/MM/YYYY")
+                    "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False)
                 },
                 disabled=["Name", "phone", "email", "plan name", "Usage check (Batch A)", "Usage check (Batch B)"]
             )
@@ -4795,6 +4770,46 @@ with tab_upload:
                             # Smart dynamic column discovery for Usage Data
                             col_sync, col_credits, col_login, col_contacts = find_usage_columns(s_df)
 
+                            # Auto-detect multi-month column & Desktop Version column
+                            col_month = None
+                            for c in s_df.columns:
+                                if any(k in str(c).lower().strip() for k in ['purchase month', 'purchase_month', 'cohort month', 'month']):
+                                    col_month = c
+                                    break
+
+                            col_ver = None
+                            for c in s_df.columns:
+                                if any(k in str(c).lower().strip() for k in ['desktop version', 'desktop app version', 'desktop_version', 'app version', 'version']):
+                                    col_ver = c
+                                    break
+
+                            target_sel = st.session_state.get("cohort_upload_target", "")
+                            if "September" in target_sel:
+                                default_batch_name = "September.csv"
+                                default_dt_str = "15/09/2026"
+                            elif "August" in target_sel:
+                                default_batch_name = "aug2609.csv"
+                                default_dt_str = "15/08/2026"
+                            elif "July" in target_sel:
+                                default_batch_name = "july2609.csv"
+                                default_dt_str = "15/07/2026"
+                            else:
+                                fn_l = str(uploaded_file.name).lower()
+                                if any(k in fn_l for k in ['sep', '092026', 'september']):
+                                    default_batch_name = "September.csv"
+                                    default_dt_str = "15/09/2026"
+                                elif any(k in fn_l for k in ['aug', '082026', 'august']):
+                                    default_batch_name = "aug2609.csv"
+                                    default_dt_str = "15/08/2026"
+                                elif any(k in fn_l for k in ['jul', '072026', 'july']):
+                                    default_batch_name = "july2609.csv"
+                                    default_dt_str = "15/07/2026"
+                                else:
+                                    default_batch_name = str(uploaded_file.name).strip()
+                                    default_dt_str = datetime.now().strftime('%d/%m/%Y')
+
+                            version_records = []
+
                             for _, row in s_df.iterrows():
                                 cx_name = _get_row_val(row, ['first name', 'customer_name', 'name', 'customer'])
                                 raw_phone = _get_row_val(row, ['phone', 'mobile', 'contact', 'lsq phone'])
@@ -4832,6 +4847,32 @@ with tab_upload:
 
                                 phone_clean_match = raw_phone.replace('.0', '').replace('+91', '').replace(' ', '').replace('-', '').strip()
                                 phone_display = phone_clean_match
+
+                                # Dynamic Cohort Batch & Date per row (Multi-month sheet support)
+                                if col_month:
+                                    raw_m = str(row[col_month]).strip()
+                                    m_l = raw_m.lower()
+                                    if 'jul' in m_l:
+                                        row_batch = "july2609.csv"
+                                        row_date = "15/07/2026"
+                                    elif 'aug' in m_l:
+                                        row_batch = "aug2609.csv"
+                                        row_date = "15/08/2026"
+                                    elif 'sep' in m_l:
+                                        row_batch = "September.csv"
+                                        row_date = "15/09/2026"
+                                    elif 'oct' in m_l:
+                                        row_batch = "October.csv"
+                                        row_date = "15/10/2026"
+                                    elif raw_m and raw_m.lower() not in ['nan', 'none', '']:
+                                        row_batch = f"{raw_m}.csv"
+                                        row_date = datetime.now().strftime('%d/%m/%Y')
+                                    else:
+                                        row_batch = default_batch_name
+                                        row_date = default_dt_str
+                                else:
+                                    row_batch = default_batch_name
+                                    row_date = default_dt_str
 
                                 # Extract Features properly via unified resolver
                                 features = resolve_features_for_plan(plan_name)
@@ -4885,47 +4926,40 @@ with tab_upload:
                                         "email": email,
                                         "plan name": plan_name,
                                         "feature": feat,
-                                        "Plan Stat Date": plan_start,
+                                        "Plan Stat Date": plan_start if not col_month else row_date,
                                         "Plan End Date": plan_end,
                                         "Usage check": health_status,
                                         "Last Sync in 7 days": "Blank / Not Synced" if is_s_blank else sync_7d,
                                         "CP Usage in last 7 days": cp_7d,
                                         "Contact details fetched in last 7 days": contact_7d,
                                         "App login done in last 7 days": login_7d,
-                                        "raw_credits": c_val
+                                        "raw_credits": c_val,
+                                        "Upload_Batch": row_batch,
+                                        "Upload_Date": row_date
                                     })
                                 s_no += 1
+
+                                # Capture desktop app version if present
+                                if col_ver:
+                                    ver_val = str(row[col_ver]).strip() if pd.notna(row[col_ver]) else ""
+                                    if ver_val and ver_val.lower() not in ['nan', 'none', '']:
+                                        admin_id_val = _get_row_val(row, ['admin id', 'admin_id', 'admin user id'])
+                                        m_label = str(row[col_month]).strip() if col_month and pd.notna(row[col_month]) else "Master"
+                                        version_records.append({
+                                            'Month': m_label,
+                                            'Customer name': cx_name,
+                                            'Company': cx_name,
+                                            'Phone': phone_display,
+                                            'Email': email,
+                                            'Admin / User ID': admin_id_val,
+                                            'Desktop app version': ver_val,
+                                            'Environment': 'Cloud',
+                                            'Source': 'Consolidated Master Sheet'
+                                        })
 
                             out_df = pd.DataFrame(formatted_rows)
 
                             if not out_df.empty:
-                                target_sel = st.session_state.get("cohort_upload_target", "")
-                                if "September" in target_sel:
-                                    clean_batch_name = "September.csv"
-                                    today_dt_str = "15/09/2026"
-                                elif "August" in target_sel:
-                                    clean_batch_name = "aug2609.csv"
-                                    today_dt_str = "15/08/2026"
-                                elif "July" in target_sel:
-                                    clean_batch_name = "july2609.csv"
-                                    today_dt_str = "15/07/2026"
-                                else:
-                                    fn_l = str(uploaded_file.name).lower()
-                                    if any(k in fn_l for k in ['sep', '092026', 'september']):
-                                        clean_batch_name = "September.csv"
-                                        today_dt_str = "15/09/2026"
-                                    elif any(k in fn_l for k in ['aug', '082026', 'august']):
-                                        clean_batch_name = "aug2609.csv"
-                                        today_dt_str = "15/08/2026"
-                                    elif any(k in fn_l for k in ['jul', '072026', 'july']):
-                                        clean_batch_name = "july2609.csv"
-                                        today_dt_str = "15/07/2026"
-                                    else:
-                                        clean_batch_name = str(uploaded_file.name).strip()
-                                        today_dt_str = datetime.now().strftime('%d/%m/%Y')
-
-                                out_df['Upload_Batch'] = clean_batch_name
-                                out_df['Upload_Date'] = today_dt_str
                                 out_df = out_df.astype(str)
 
                                 # Ensure Upload_Date column exists in DB table
@@ -4935,16 +4969,11 @@ with tab_upload:
                                 except Exception:
                                     pass
 
-                                # ── DEDUPLICATED LIVE UPSERT (NO DOUBLE ROWS) ──
-                                phones_in_upload = [str(p).replace('.0', '').strip() for p in out_df['phone'].unique() if str(p).strip()]
-
-                                # Cleanly replace previous records for THIS cohort batch so re-uploading keeps the newest data
-                                if clean_batch_name in ['September.csv', 'aug2609.csv', 'july2609.csv']:
-                                    conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (clean_batch_name,))
-                                    conn.commit()
-                                elif phones_in_upload:
-                                    conn.executemany("DELETE FROM sales_plan_history WHERE phone = ? AND Upload_Batch = ?", [(p, clean_batch_name) for p in phones_in_upload])
-                                    conn.commit()
+                                # ── DEDUPLICATED LIVE UPSERT (CLEAN REPLACE FOR UPLOADED BATCHES) ──
+                                batches_in_up = [b for b in out_df['Upload_Batch'].unique() if str(b).strip()]
+                                for b in batches_in_up:
+                                    conn.execute("DELETE FROM sales_plan_history WHERE Upload_Batch = ?", (b,))
+                                conn.commit()
 
                                 # Insert fresh customer records with updated batch name & date
                                 out_df.to_sql('sales_plan_history', conn, if_exists='append', index=False)
@@ -4953,7 +4982,7 @@ with tab_upload:
                                 # 4. Save metadata so app and dashboard always know the latest active file and upload time
                                 try:
                                     conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
-                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (clean_batch_name,))
+                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (batches_in_up[-1] if batches_in_up else default_batch_name,))
                                     conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (datetime.now().strftime('%d %b %Y, %I:%M %p'),))
                                     conn.commit()
                                 except Exception:
@@ -4966,6 +4995,27 @@ with tab_upload:
                                     all_updated.to_csv(csv_master, index=False, compression='gzip')
                                 except Exception:
                                     pass
+
+                                # 6. Sync Desktop Version details if present in upload
+                                if version_records:
+                                    try:
+                                        ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
+                                        ver_df = pd.DataFrame(version_records)
+                                        ver_df.to_csv(ver_csv, index=False)
+
+                                        conn.execute("CREATE TABLE IF NOT EXISTS desktop_version_details (id INTEGER PRIMARY KEY AUTOINCREMENT, month TEXT, customer_name TEXT, company TEXT, phone TEXT, email TEXT, admin_user_id TEXT, desktop_app_version TEXT)")
+                                        conn.execute("DELETE FROM desktop_version_details")
+                                        for r in version_records:
+                                            conn.execute("INSERT INTO desktop_version_details (month, customer_name, company, phone, email, admin_user_id, desktop_app_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                                         (r.get('Month', ''), r.get('Customer name', ''), r.get('Company', ''), r.get('Phone', ''), r.get('Email', ''), r.get('Admin / User ID', ''), r.get('Desktop app version', '')))
+                                        conn.commit()
+                                        try:
+                                            from desktop_version_tracker import load_cached_desktop_data_with_usage
+                                            load_cached_desktop_data_with_usage.clear()
+                                        except Exception:
+                                            pass
+                                    except Exception:
+                                        pass
                             else:
                                 st.error("❌ No valid customer records could be extracted from the uploaded file. Please verify file headers (Name, Phone, Plan Name).")
                                 st.stop()
