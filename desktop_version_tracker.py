@@ -198,22 +198,22 @@ def render_desktop_version_tracker(conn):
             return
 
         st.markdown("""
-        <div style="background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); padding: 22px 26px; border-radius: 14px; border: 1.5px solid #334155; margin-bottom: 22px; box-shadow: 0 4px 15px rgba(0,0,0,0.25);">
-            <div style="color: #FFFFFF !important; margin: 0 0 8px 0; font-size: 24px; font-weight: 800; display: flex; align-items: center; gap: 10px;">
-                <span style="background: rgba(56, 189, 248, 0.2); border: 1px solid rgba(56, 189, 248, 0.5); padding: 4px 10px; border-radius: 8px; font-size: 20px;">🔄</span>
-                <span style="color: #FFFFFF !important; text-shadow: 0 1px 2px rgba(0,0,0,0.3);">Desktop App Version Tracker &amp; Upgrade Studio</span>
+        <div style="background: #FFFFFF; padding: 20px 24px; border-radius: 12px; border: 1.5px solid #E2E8F0; border-left: 6px solid #0284C7; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                <span style="background: #E0F2FE; border: 1px solid #BAE6FD; padding: 6px 10px; border-radius: 8px; font-size: 20px;">🔄</span>
+                <span style="font-size: 22px; font-weight: 800; color: #0F172A;">Desktop App Version Tracker &amp; Upgrade Studio</span>
             </div>
-            <div style="color: #E2E8F0 !important; margin: 0 0 14px 0; font-size: 14px; line-height: 1.5;">
-                Tracking desktop software versions with <b style="color: #38BDF8 !important;">Live Customer Usage Health (Proper 🟢 / Low 🟡 / No Usage 🔴)</b> across July, August, and September cohorts.
-            </div>
+            <p style="margin: 0 0 14px 0; font-size: 14px; color: #334155; line-height: 1.5;">
+                Tracking desktop software versions with <b style="color: #0369A1;">Live Customer Usage Health (Proper 🟢 / Low 🟡 / No Usage 🔴)</b> across July, August, and September cohorts.
+            </p>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <span style="background: #064E3B; color: #A7F3D0 !important; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 700; border: 1.5px solid #059669; display: inline-flex; align-items: center; gap: 4px;">
+                <span style="background: #ECFDF5; color: #065F46; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 700; border: 1px solid #A7F3D0; display: inline-flex; align-items: center; gap: 4px;">
                     🟢 Latest Tally: 2.0.1_tally (Local) / 1.8.6_tally (Cloud)
                 </span>
-                <span style="background: #064E3B; color: #A7F3D0 !important; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 700; border: 1.5px solid #059669; display: inline-flex; align-items: center; gap: 4px;">
+                <span style="background: #ECFDF5; color: #065F46; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 700; border: 1px solid #A7F3D0; display: inline-flex; align-items: center; gap: 4px;">
                     🟢 Latest Busy: 3.6.12_busy
                 </span>
-                <span style="background: #7F1D1D; color: #FECACA !important; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 700; border: 1.5px solid #DC2626; display: inline-flex; align-items: center; gap: 4px;">
+                <span style="background: #FEF2F2; color: #991B1B; padding: 6px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 700; border: 1px solid #FECACA; display: inline-flex; align-items: center; gap: 4px;">
                     🔴 Outdated Versions: Requires Upgrade Message
                 </span>
             </div>
