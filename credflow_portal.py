@@ -81,7 +81,7 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
-    TARGET_SCORING_VER = 'v20261013_clean_1060_final'
+    TARGET_SCORING_VER = 'v20261014_clean_1060_official_restored'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
     s_ver_row = cur.fetchone()
@@ -4741,7 +4741,7 @@ if is_admin:
         if os.path.exists(csv_master):
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261013_clean_1060_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261014_clean_1060_official_restored') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
