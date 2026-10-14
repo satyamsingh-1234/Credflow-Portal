@@ -95,9 +95,9 @@ try:
     if p_cnt == 0 and os.path.exists(csv_master):
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261013_clean_1060_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
     elif os.path.exists(csv_master):
         try:
@@ -2330,6 +2330,9 @@ def render_dashboard(df_sales, prefix):
         recent_batches = [b for b in df_sales['Upload_Batch'].dropna().unique() if str(b).strip() not in ['July.csv', 'Aug.csv', 'nan', 'none', '']]
         if recent_batches:
             latest_file_name = str(recent_batches[-1])
+
+    if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
+        latest_file_name = "Unified Master Sheet (July + August + September)"
 
     if latest_file_name:
         st.markdown(f"""
@@ -4720,12 +4723,12 @@ if is_admin:
         if os.path.exists(csv_master):
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261013_clean_1060_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
             st.cache_data.clear()
-            st.sidebar.success("✅ Database restored to July + August + September (1,062 Customers)!")
+            st.sidebar.success("✅ Database restored to July + August + September (1,060 Customers)!")
             st.rerun()
 
 if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
@@ -5093,7 +5096,12 @@ with tab_upload:
                                 # 4. Save metadata so app and dashboard always know the latest active file and upload time
                                 try:
                                     conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)")
-                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (batches_in_up[-1] if batches_in_up else default_batch_name,))
+                                    up_real_fn = getattr(uploaded_file, 'name', '') or default_batch_name
+                                    if col_month:
+                                        save_fn_label = f"{up_real_fn} (Multi-Month Master)"
+                                    else:
+                                        save_fn_label = up_real_fn
+                                    conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (save_fn_label,))
                                     conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (datetime.now().strftime('%d %b %Y, %I:%M %p'),))
                                     conn.commit()
                                 except Exception:
