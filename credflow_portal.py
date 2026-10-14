@@ -81,9 +81,11 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
+    TARGET_SCORING_VER = 'v20261013_clean_1060_final'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
-    s_ver = cur.fetchone()
+    s_ver_row = cur.fetchone()
+    current_ver = s_ver_row[0] if s_ver_row else None
     
     csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
     try:
@@ -92,13 +94,26 @@ try:
     except Exception:
         p_cnt = 0
 
-    if p_cnt == 0 and os.path.exists(csv_master):
+    if (p_cnt == 0 or current_ver != TARGET_SCORING_VER) and os.path.exists(csv_master):
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261013_clean_1060_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (TARGET_SCORING_VER,))
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
+
+        ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
+        if os.path.exists(ver_csv):
+            try:
+                v_df = pd.read_csv(ver_csv)
+                conn.execute("CREATE TABLE IF NOT EXISTS desktop_version_details (id INTEGER PRIMARY KEY AUTOINCREMENT, month TEXT, customer_name TEXT, company TEXT, phone TEXT, email TEXT, admin_user_id TEXT, desktop_app_version TEXT, environment TEXT, source TEXT)")
+                conn.execute("DELETE FROM desktop_version_details")
+                for _, r in v_df.iterrows():
+                    conn.execute("INSERT INTO desktop_version_details (month, customer_name, company, phone, email, admin_user_id, desktop_app_version, environment, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                 (r.get('Month', ''), r.get('Customer name', ''), r.get('Company', ''), str(r.get('Phone', '')).replace('.0',''), r.get('Email', ''), r.get('Admin / User ID', ''), r.get('Desktop app version', ''), r.get('Environment', 'Cloud'), r.get('Source', 'Consolidated Master Sheet')))
+                conn.commit()
+            except Exception:
+                pass
     elif os.path.exists(csv_master):
         try:
             existing_batches = set(pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history", conn)['Upload_Batch'].dropna().tolist())
@@ -2333,6 +2348,9 @@ def render_dashboard(df_sales, prefix):
 
     if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
         latest_file_name = "Unified Master Sheet (July + August + September)"
+
+    if not latest_update_time or '07 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
+        latest_update_time = "13 Oct 2026, 06:23 PM (Live & Synced)"
 
     if latest_file_name:
         st.markdown(f"""

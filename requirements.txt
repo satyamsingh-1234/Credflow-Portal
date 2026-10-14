@@ -1,4 +1,4 @@
-# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.4-unified-master-sync
+# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.5-sync-13oct-banner
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.15.0
