@@ -1,4 +1,4 @@
-# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.0-fix-header-visibility
+# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.1-admin-lock-and-visitor-tracker
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.15.0

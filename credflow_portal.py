@@ -2737,6 +2737,10 @@ def render_outreach_tools(cx_df):
     st.subheader("🛠️ Outreach & Support Automation Tools")
     st.caption("Testing sandboxes, support ticket dispatchers, and personal WhatsApp device pairing.")
 
+    is_admin_user = st.session_state.get('admin_unlocked', False)
+    if not is_admin_user:
+        st.warning("🔒 **Admin Access Required**: Testing sandboxes, WhatsApp gateway setup, and support ticket dispatching are locked. Please select **🔑 Admin Access** in the sidebar (Password: `credflow2026`) to unlock.")
+
     # ── NO USAGE SUPPORT TICKET DESK ──
     no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
     
@@ -2787,11 +2791,11 @@ def render_outreach_tools(cx_df):
         
         btn_c1, btn_c2, btn_c3 = st.columns([2.5, 2, 1.5])
         with btn_c1:
-            send_all_tickets = st.button(f"🚀 Dispatch All {len(no_usage_cx_all)} Support Tickets", type="primary", use_container_width=True, key="tools_btn_send_all_nu_tickets")
+            send_all_tickets = st.button(f"🚀 Dispatch All {len(no_usage_cx_all)} Support Tickets", type="primary", disabled=not is_admin_user, use_container_width=True, key="tools_btn_send_all_nu_tickets")
         with btn_c2:
-            send_pending_tickets = st.button(f"⚡ Dispatch Pending Only ({pending_cnt})", use_container_width=True, key="tools_btn_send_pending_nu_tickets")
+            send_pending_tickets = st.button(f"⚡ Dispatch Pending Only ({pending_cnt})", disabled=not is_admin_user, use_container_width=True, key="tools_btn_send_pending_nu_tickets")
         with btn_c3:
-            test_1_ticket = st.button("🧪 Test 1 Sample Ticket", use_container_width=True, key="tools_btn_test_1_nu_ticket")
+            test_1_ticket = st.button("🧪 Test 1 Sample Ticket", disabled=not is_admin_user, use_container_width=True, key="tools_btn_test_1_nu_ticket")
             
         # Preview Table
         preview_cols = ['Name', 'phone', 'email', 'plan name', 'Last Sync in 7 days', 'Ticket Status']
@@ -2859,7 +2863,7 @@ def render_outreach_tools(cx_df):
             with tp4:
                 test_pwa_plan = st.text_input("Plan Name", value="Premium Plan", key="test_pwa_plan")
                 
-            if st.button("🚀 Send Test WhatsApp via Personal Number", type="primary", key="btn_test_pwa", use_container_width=True):
+            if st.button("🚀 Send Test WhatsApp via Personal Number", type="primary", disabled=not is_admin_user, key="btn_test_pwa", use_container_width=True):
                 if not test_pwa_phone or len(test_pwa_phone.strip()) < 10:
                     st.warning("Kripya valid 10-digit mobile number dalein.")
                 else:
@@ -2891,7 +2895,7 @@ def render_outreach_tools(cx_df):
             with tc4:
                 test_wa_credits = st.text_input("Raw Credits / Used", value="500", key="test_wa_credits")
                 
-            if st.button("🚀 Send Test WhatsApp Message", type="primary", use_container_width=True, key="btn_test_wa_modal"):
+            if st.button("🚀 Send Test WhatsApp Message", type="primary", disabled=not is_admin_user, use_container_width=True, key="btn_test_wa_modal"):
                 if not test_wa_phone or len(test_wa_phone.strip()) < 10:
                     st.warning("Kripya valid 10-digit mobile number dalein.")
                 else:
@@ -2915,7 +2919,7 @@ def render_outreach_tools(cx_df):
             with tec4:
                 test_email_plan = st.text_input("Plan Name", value="Premium Plan", key="test_email_plan")
                 
-            if st.button("🚀 Send Test Email", type="primary", use_container_width=True, key="btn_test_email_modal"):
+            if st.button("🚀 Send Test Email", type="primary", disabled=not is_admin_user, use_container_width=True, key="btn_test_email_modal"):
                 if not test_email_addr or "@" not in test_email_addr:
                     st.warning("Kripya valid email address dalein.")
                 else:
@@ -2947,7 +2951,7 @@ def render_outreach_tools(cx_df):
             with ttk4:
                 test_tk_plan = st.text_input("Subscribed Plan", value="Saver Plan (1 Year)", key="test_tk_plan")
 
-            if st.button("🚀 Send Test Support Ticket to support@credflow.in", type="primary", use_container_width=True, key="btn_send_test_support_ticket"):
+            if st.button("🚀 Send Test Support Ticket to support@credflow.in", type="primary", disabled=not is_admin_user, use_container_width=True, key="btn_send_test_support_ticket"):
                 test_cx = {
                     "Name": test_tk_name,
                     "phone": test_tk_phone,
@@ -2963,6 +2967,7 @@ def render_outreach_tools(cx_df):
                     st.success("✅ Test Support Ticket dispatched successfully to support@credflow.in!")
                 else:
                     st.error(f"❌ Failed to dispatch ticket: {res}")
+
 
     st.markdown("---")
 
@@ -3189,6 +3194,10 @@ def render_crm(cx_df):
         desktop_queue_json = make_desktop_queue_json(selected_pwa_df.to_dict('records')) if not selected_pwa_df.empty else "[]"
         count_selected = len(selected_pwa_df)
 
+        is_admin_user = st.session_state.get('admin_unlocked', False)
+        if not is_admin_user:
+            st.warning("🔒 **Outreach & Manual Save Locked**: Admin access required to send bulk WhatsApp/Emails, auto-dispatch, or save database edits. Please unlock Admin Mode in sidebar (Password: `credflow2026`).")
+
         col_dt, col_pwa, col_crm = st.columns([3.5, 3.5, 3])
         with col_dt:
             st.download_button(
@@ -3201,18 +3210,18 @@ def render_crm(cx_df):
                 help="🌟 100% Free & Unlimited! Downloads 'wa_desktop_queue.json' directly to your Downloads folder. Then run 'CredFlow_WhatsApp_AutoSender' on your Desktop to dispatch automatically without any limits!"
             )
         with col_pwa:
-            pwa_clicked = st.button("📲 Auto-Send via Green-API", use_container_width=True, help="Cloud API Gateway send. (Note: Free Green-API account is limited to 3 contacts/month)")
+            pwa_clicked = st.button("📲 Auto-Send via Green-API", disabled=not is_admin_user, use_container_width=True, help="Cloud API Gateway send. Requires Admin Access.")
         with col_crm:
             excel_crm = to_excel_download(edited_df, sheet_name="CRM Data")
             st.download_button("📥 Export CRM Excel", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
         col1, col2, col3 = st.columns([3.5, 3.5, 3])
         with col1:
-            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires wallet balance on app.interakt.ai")
+            wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", disabled=not is_admin_user, use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires Admin Access.")
         with col2:
-            em_clicked = st.button("🚀 Send Emails (SMTP)", type="secondary", use_container_width=True)
+            em_clicked = st.button("🚀 Send Emails (SMTP)", disabled=not is_admin_user, type="secondary", use_container_width=True)
         with col3:
-            free_wa_clicked = st.button("💬 Free WA (Web Links)", type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links without requiring wallet balance")
+            free_wa_clicked = st.button("💬 Free WA (Web Links)", disabled=not is_admin_user, type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links. Requires Admin Access.")
 
         if count_selected > 0:
             st.info(f"💡 **Unlimited Free Auto-Sending:** {count_selected} customers selected! Click **'🖥️ Export Desktop Queue'** above ➔ Open **'CredFlow_WhatsApp_AutoSender'** on your Desktop ➔ Click **'🚀 Start Auto-Sending'**.")
@@ -3331,7 +3340,7 @@ def render_crm(cx_df):
         st.markdown("<br>", unsafe_allow_html=True)
         col_sv1, col_sv2 = st.columns([3, 7])
         with col_sv1:
-            save_crm_btn = st.button("💾 Save CRM Changes to Database", type="primary", use_container_width=True, key="btn_save_crm_manual_edits")
+            save_crm_btn = st.button("💾 Save CRM Changes to Database", type="primary", disabled=not is_admin_user, use_container_width=True, key="btn_save_crm_manual_edits")
 
         editor_state = st.session_state.get(editor_key, {})
         user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
@@ -4075,6 +4084,10 @@ def render_outreach_history(conn):
 def render_template_manager(conn):
     import streamlit.components.v1 as components
 
+    is_admin_user = st.session_state.get('admin_unlocked', False)
+    if not is_admin_user:
+        st.warning("🔒 **Template Editing Locked**: Only Admins can modify or save outreach templates. Please select **🔑 Admin Access** in the sidebar (Password: `credflow2026`) to edit templates.")
+
     st.markdown("""
     <div style="background: #FFFFFF; padding: 18px 22px; border-radius: 12px; border: 1px solid #E2E8F0; border-top: 4px solid #10B981; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
@@ -4124,14 +4137,14 @@ def render_template_manager(conn):
                 
                 col_save, col_reset, col_space = st.columns([2, 2, 6])
                 with col_save:
-                    if st.button(f"💾 Save Template", key=f"save_{t_id}", type="primary"):
+                    if st.button(f"💾 Save Template", key=f"save_{t_id}", type="primary", disabled=not is_admin_user):
                         conn.execute("UPDATE outreach_templates SET subject = ?, body = ?, updated_at = ? WHERE template_id = ?",
                                      (new_sub, new_body, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
                         conn.commit()
                         st.toast(f"✅ Saved {label}!", icon="💾")
                         st.rerun()
                 with col_reset:
-                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}"):
+                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}", disabled=not is_admin_user):
                         def_tpl = DEFAULT_OUTREACH_TEMPLATES[t_id]
                         conn.execute("UPDATE outreach_templates SET subject = ?, body = ?, updated_at = ? WHERE template_id = ?",
                                      (def_tpl["subject"], def_tpl["body"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
@@ -4174,14 +4187,14 @@ def render_template_manager(conn):
                 
                 col_save, col_reset, col_space = st.columns([2, 2, 6])
                 with col_save:
-                    if st.button(f"💾 Save Template", key=f"save_{t_id}", type="primary"):
+                    if st.button(f"💾 Save Template", key=f"save_{t_id}", type="primary", disabled=not is_admin_user):
                         conn.execute("UPDATE outreach_templates SET body = ?, updated_at = ? WHERE template_id = ?",
                                      (new_body, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
                         conn.commit()
                         st.toast(f"✅ Saved {label}!", icon="💾")
                         st.rerun()
                 with col_reset:
-                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}"):
+                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}", disabled=not is_admin_user):
                         def_tpl = DEFAULT_OUTREACH_TEMPLATES[t_id]
                         conn.execute("UPDATE outreach_templates SET body = ?, updated_at = ? WHERE template_id = ?",
                                      (def_tpl["body"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
@@ -4232,14 +4245,14 @@ def render_template_manager(conn):
 
                 col_save, col_reset, col_space = st.columns([2, 2, 6])
                 with col_save:
-                    if st.button(f"💾 Save Config", key=f"save_{t_id}", type="primary"):
+                    if st.button(f"💾 Save Config", key=f"save_{t_id}", type="primary", disabled=not is_admin_user):
                         conn.execute("UPDATE outreach_templates SET subject = ?, body = ?, updated_at = ? WHERE template_id = ?",
                                      (new_name, new_desc, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
                         conn.commit()
                         st.toast(f"✅ Updated Interakt settings for {label}!", icon="💾")
                         st.rerun()
                 with col_reset:
-                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}"):
+                    if st.button(f"🔄 Reset Default", key=f"reset_{t_id}", disabled=not is_admin_user):
                         def_tpl = DEFAULT_OUTREACH_TEMPLATES[t_id]
                         conn.execute("UPDATE outreach_templates SET subject = ?, body = ?, updated_at = ? WHERE template_id = ?",
                                      (def_tpl["subject"], def_tpl["body"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"), t_id))
@@ -4621,22 +4634,97 @@ else:
 
 is_admin = st.session_state.get('admin_unlocked', False)
 
+def log_portal_visit(page_name="Dashboard & CRM"):
+    try:
+        ip = "Direct / Cloud"
+        device = "Desktop Browser"
+        if hasattr(st, "context") and hasattr(st.context, "headers"):
+            headers = st.context.headers
+            raw_ip = headers.get("x-forwarded-for") or headers.get("cf-connecting-ip") or headers.get("remote-addr") or "Direct / Cloud"
+            ip = raw_ip.split(",")[0].strip() if "," in raw_ip else raw_ip.strip()
+            ua = headers.get("user-agent", "")
+            
+            d_type = "Desktop"
+            if any(k in ua for k in ["Android", "iPhone", "Mobile"]):
+                d_type = "Mobile"
+            elif any(k in ua for k in ["iPad", "Tablet"]):
+                d_type = "Tablet"
+                
+            browser = "Browser"
+            if "Chrome" in ua and "Edg" not in ua: browser = "Chrome"
+            elif "Safari" in ua and "Chrome" not in ua: browser = "Safari"
+            elif "Edg" in ua: browser = "Edge"
+            elif "Firefox" in ua: browser = "Firefox"
+            
+            device = f"{d_type} ({browser})"
+            
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        import time as _t
+        last_logged = st.session_state.get("_last_visit_log_time", 0)
+        curr_t = _t.time()
+        if curr_t - last_logged > 30: # Log at most once per 30 seconds per session
+            st.session_state["_last_visit_log_time"] = curr_t
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS portal_visitors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT,
+                    ip_address TEXT,
+                    device_info TEXT,
+                    page_name TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT INTO portal_visitors (timestamp, ip_address, device_info, page_name) VALUES (?, ?, ?, ?)",
+                (now_str, ip, device, page_name)
+            )
+            conn.commit()
+    except Exception:
+        pass
+
+log_portal_visit()
+
+if is_admin:
+    with st.sidebar.expander("👥 Live Website Visitors Tracker", expanded=False):
+        try:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS portal_visitors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT,
+                    ip_address TEXT,
+                    device_info TEXT,
+                    page_name TEXT
+                )
+            """)
+            total_visits = conn.execute("SELECT COUNT(*) FROM portal_visitors").fetchone()[0]
+            unique_ips = conn.execute("SELECT COUNT(DISTINCT ip_address) FROM portal_visitors").fetchone()[0]
+            vc1, vc2 = st.columns(2)
+            vc1.metric("Total Views", total_visits)
+            vc2.metric("Unique IPs", unique_ips)
+            recent_v = pd.read_sql("SELECT timestamp as 'Time', ip_address as 'IP', device_info as 'Device', page_name as 'Page' FROM portal_visitors ORDER BY id DESC LIMIT 25", conn)
+            st.dataframe(recent_v, use_container_width=True, hide_index=True)
+            if st.button("🗑️ Clear Visitor Logs", use_container_width=True, key="btn_clear_vis_logs"):
+                conn.execute("DELETE FROM portal_visitors")
+                conn.commit()
+                st.rerun()
+        except Exception:
+            st.info("No visitor logs yet.")
+
+    if st.sidebar.button("🔁 Reset Master Baseline (July + August + September = 1,062 CX)", use_container_width=True, help="Force reset database to official master: July, August, and September cohorts"):
+        csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
+        if os.path.exists(csv_master):
+            clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
+            clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.commit()
+            st.cache_data.clear()
+            st.sidebar.success("✅ Database restored to July + August + September (1,062 Customers)!")
+            st.rerun()
+
 if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
-
-if st.sidebar.button("🔁 Reset Master Baseline (July + August + September = 1,062 CX)", use_container_width=True, help="Force reset database to official master: July, August, and September cohorts"):
-    csv_master = os.path.join(os.path.dirname(__file__), "clean_master_data.csv.gz")
-    if os.path.exists(csv_master):
-        clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
-        clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261009_clean_1062_final') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'September.csv') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', 'Latest (September 2026)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.commit()
-        st.cache_data.clear()
-        st.sidebar.success("✅ Database restored to July + August + September (1,062 Customers)!")
-        st.rerun()
 
 
 tab_dash, tab_weekly, tab_comp, tab_desktop, tab_hist, tab_tpl, tab_upload = st.tabs([
