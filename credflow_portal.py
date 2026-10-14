@@ -3330,12 +3330,12 @@ def render_crm(cx_df):
         editor_state = st.session_state.get(editor_key, {})
         user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
 
-        diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool)
-        diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool)
-        diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool)
+        diff_wa = ui_display_df['✅ WA Sent'].fillna(False).astype(bool) != edited_df['✅ WA Sent'].fillna(False).astype(bool) if '✅ WA Sent' in ui_display_df.columns and '✅ WA Sent' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_fwa = ui_display_df['✅ Free WA Sent'].fillna(False).astype(bool) != edited_df['✅ Free WA Sent'].fillna(False).astype(bool) if '✅ Free WA Sent' in ui_display_df.columns and '✅ Free WA Sent' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_em = ui_display_df['📨 Email Sent'].fillna(False).astype(bool) != edited_df['📨 Email Sent'].fillna(False).astype(bool) if '📨 Email Sent' in ui_display_df.columns and '📨 Email Sent' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
         diff_status_upd = ui_display_df['Status Update'].fillna('').astype(str).str.strip() != edited_df['Status Update'].fillna('').astype(str).str.strip() if 'Status Update' in ui_display_df.columns and 'Status Update' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
-        diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip()
-        diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int)
+        diff_remarks = ui_display_df['Remarks'].fillna('').astype(str).str.strip() != edited_df['Remarks'].fillna('').astype(str).str.strip() if 'Remarks' in ui_display_df.columns and 'Remarks' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
+        diff_credits = pd.to_numeric(ui_display_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) != pd.to_numeric(edited_df['Extra Credits'].fillna(0), errors='coerce').fillna(0).astype(int) if 'Extra Credits' in ui_display_df.columns and 'Extra Credits' in edited_df.columns else pd.Series(False, index=ui_display_df.index)
 
         diff = diff_wa | diff_fwa | diff_em | diff_status_upd | diff_remarks | diff_credits
 
@@ -3702,21 +3702,21 @@ def render_batch_comparison(conn):
                     process_free_wa_dispatch_safe(selected_fwa_u.to_dict('records'), conn, usage_check_col='Usage check (Batch B)')
 
             # Auto-save edits for Upgraded list
-            diff_status = upg_df_export['Call Status'].fillna('').astype(str).str.strip() != upg_edited['Call Status'].fillna('').astype(str).str.strip()
+            diff_status = upg_df_export['Call Status'].fillna('').astype(str).str.strip() != upg_edited['Call Status'].fillna('').astype(str).str.strip() if 'Call Status' in upg_df_export.columns and 'Call Status' in upg_edited.columns else pd.Series(False, index=upg_df_export.index)
             diff_issue = upg_df_export['Issue Type'].fillna('').astype(str).str.strip() != upg_edited['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in upg_df_export.columns and 'Issue Type' in upg_edited.columns else pd.Series(False, index=upg_df_export.index)
-            diff_remarks = upg_df_export['Remarks'].fillna('').astype(str).str.strip() != upg_edited['Remarks'].fillna('').astype(str).str.strip()
+            diff_remarks = upg_df_export['Remarks'].fillna('').astype(str).str.strip() != upg_edited['Remarks'].fillna('').astype(str).str.strip() if 'Remarks' in upg_df_export.columns and 'Remarks' in upg_edited.columns else pd.Series(False, index=upg_df_export.index)
             f_ui = pd.to_datetime(upg_df_export['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in upg_df_export.columns else pd.Series('', index=upg_df_export.index)
             f_ed = pd.to_datetime(upg_edited['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in upg_edited.columns else pd.Series('', index=upg_edited.index)
-            diff_follow = f_ui != f_ed
+            diff_follow = f_ui != f_ed if ('Call Date' in upg_df_export.columns and 'Call Date' in upg_edited.columns) else pd.Series(False, index=upg_df_export.index)
 
             diff = diff_status | diff_issue | diff_remarks | diff_follow
             if diff.any():
                 for _, row in upg_edited[diff].iterrows():
                     p = str(row.get('phone', '')).replace('.0', '').strip()
                     if not p: continue
-                    c = str(row['Call Status'])
+                    c = str(row.get('Call Status', ''))
                     it = str(row.get('Issue Type', ''))
-                    r = str(row['Remarks'])
+                    r = str(row.get('Remarks', ''))
                     f_val = row.get('Call Date', None)
                     f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
                     
@@ -3890,21 +3890,21 @@ def render_batch_comparison(conn):
                     process_free_wa_dispatch_safe(selected_fwa_d.to_dict('records'), conn, usage_check_col='Usage check (Batch B)')
 
             # Auto-save edits for Degraded list
-            diff_status = deg_df_export['Call Status'].fillna('').astype(str).str.strip() != deg_edited['Call Status'].fillna('').astype(str).str.strip()
+            diff_status = deg_df_export['Call Status'].fillna('').astype(str).str.strip() != deg_edited['Call Status'].fillna('').astype(str).str.strip() if 'Call Status' in deg_df_export.columns and 'Call Status' in deg_edited.columns else pd.Series(False, index=deg_df_export.index)
             diff_issue = deg_df_export['Issue Type'].fillna('').astype(str).str.strip() != deg_edited['Issue Type'].fillna('').astype(str).str.strip() if 'Issue Type' in deg_df_export.columns and 'Issue Type' in deg_edited.columns else pd.Series(False, index=deg_df_export.index)
-            diff_remarks = deg_df_export['Remarks'].fillna('').astype(str).str.strip() != deg_edited['Remarks'].fillna('').astype(str).str.strip()
+            diff_remarks = deg_df_export['Remarks'].fillna('').astype(str).str.strip() != deg_edited['Remarks'].fillna('').astype(str).str.strip() if 'Remarks' in deg_df_export.columns and 'Remarks' in deg_edited.columns else pd.Series(False, index=deg_df_export.index)
             f_ui = pd.to_datetime(deg_df_export['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in deg_df_export.columns else pd.Series('', index=deg_df_export.index)
             f_ed = pd.to_datetime(deg_edited['Call Date'], errors='coerce').dt.strftime('%Y-%m-%d').fillna('') if 'Call Date' in deg_edited.columns else pd.Series('', index=deg_edited.index)
-            diff_follow = f_ui != f_ed
+            diff_follow = f_ui != f_ed if ('Call Date' in deg_df_export.columns and 'Call Date' in deg_edited.columns) else pd.Series(False, index=deg_df_export.index)
 
             diff = diff_status | diff_issue | diff_remarks | diff_follow
             if diff.any():
                 for _, row in deg_edited[diff].iterrows():
                     p = str(row.get('phone', '')).replace('.0', '').strip()
                     if not p: continue
-                    c = str(row['Call Status'])
+                    c = str(row.get('Call Status', ''))
                     it = str(row.get('Issue Type', ''))
-                    r = str(row['Remarks'])
+                    r = str(row.get('Remarks', ''))
                     f_val = row.get('Call Date', None)
                     f = str(f_val) if pd.notna(f_val) and str(f_val).strip() not in ['NaT', 'None', 'nan', ''] else ""
                     
