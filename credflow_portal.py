@@ -3057,10 +3057,6 @@ def render_crm(cx_df):
             'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check']
-        existing_cols = [c for c in cols_to_keep if c in call_df.columns]
-        ui_df = call_df[existing_cols]
-
         # --- URL Memory for CRM Filters ---
         wa_opts = ["All", "Sent ✅", "Not Sent ❌"]
         fwa_opts = ["All", "Sent ✅", "Not Sent ❌"]
@@ -3088,24 +3084,26 @@ def render_crm(cx_df):
             em_filter = st.selectbox("🎯 Filter by Email Sent", em_opts, key="flt_em")
 
         if wa_filter == "Not Sent ❌" or free_wa_filter == "Not Sent ❌" or em_filter == "Not Sent ❌":
-            st.caption("💡 **Filter Active Note**: Jab aap किसी customer ko table mein 'Sent ✅' (WA/Email) mark karenge ya Bulk Send karenge, toh wo automatic 'Not Sent ❌' list se nikal kar 'Sent ✅' category mein move ho jayenge.")
+            st.caption("💡 **Filter Active Note**: Jab aap kisi customer ko message bhejenge ya status update hoga, toh wo automatic 'Not Sent ❌' list se nikal kar 'Sent ✅' category mein move ho jayenge.")
 
         if wa_filter == "Sent ✅":
-            ui_df = ui_df[ui_df['✅ WA Sent'] == True]
+            call_df = call_df[call_df['✅ WA Sent'] == True]
         elif wa_filter == "Not Sent ❌":
-            ui_df = ui_df[ui_df['✅ WA Sent'] == False]
+            call_df = call_df[call_df['✅ WA Sent'] == False]
             
         if free_wa_filter == "Sent ✅":
-            ui_df = ui_df[ui_df['✅ Free WA Sent'] == True]
+            call_df = call_df[call_df['✅ Free WA Sent'] == True]
         elif free_wa_filter == "Not Sent ❌":
-            ui_df = ui_df[ui_df['✅ Free WA Sent'] == False]
+            call_df = call_df[call_df['✅ Free WA Sent'] == False]
 
         if em_filter == "Sent ✅":
-            ui_df = ui_df[ui_df['📨 Email Sent'] == True]
+            call_df = call_df[call_df['📨 Email Sent'] == True]
         elif em_filter == "Not Sent ❌":
-            ui_df = ui_df[ui_df['📨 Email Sent'] == False]
-        # -----------------------------
-        ui_df = ui_df.reset_index(drop=True)
+            call_df = call_df[call_df['📨 Email Sent'] == False]
+
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', 'plan name', '📁 File / Batch', 'All Features', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check']
+        existing_cols = [c for c in cols_to_keep if c in call_df.columns]
+        ui_df = call_df[existing_cols].reset_index(drop=True)
 
         with st.expander("📲 **Link Personal WhatsApp (100% Free Auto-Send via QR Scan)**", expanded=False):
             render_personal_wa_connector(card_key="crm_expander")
@@ -3177,9 +3175,6 @@ def render_crm(cx_df):
                 "📱 Send Free WA": st.column_config.CheckboxColumn("📱 Send Free WA", default=False),
                 "phone": st.column_config.TextColumn("Phone Number 📞", disabled=True),
                 "WhatsApp": st.column_config.LinkColumn("Open WhatsApp", display_text="Chat 💬"),
-                "✅ WA Sent": st.column_config.CheckboxColumn("✅ WA API", disabled=False),
-                "✅ Free WA Sent": st.column_config.CheckboxColumn("✅ Free WA", disabled=False),
-                "📨 Email Sent": st.column_config.CheckboxColumn("📨 Email Sent", disabled=False),
                 "raw_credits": st.column_config.TextColumn("Credits Used", disabled=True),
                 "All Features": st.column_config.TextColumn("Plan Features 🎁", disabled=True),
                 "App login done in last 7 days": st.column_config.TextColumn("Login 7d", disabled=True),
@@ -3364,24 +3359,35 @@ def render_crm(cx_df):
                 for idx, row in changed_rows.iterrows():
                     p = str(row.get('phone', '')).replace('.0', '').strip()
                     if not p: continue
-                    w = 1 if row.get('✅ WA Sent', False) else 0
-                    fw = 1 if row.get('✅ Free WA Sent', False) else 0
-                    e = 1 if row.get('📨 Email Sent', False) else 0
-                    su = str(row.get('Status Update', '')).strip()
-                    r = str(row.get('Remarks', '')).strip()
-                    ec = int(row.get('Extra Credits', 0)) if str(row.get('Extra Credits', '')).strip() not in ['', 'nan', 'None'] else 0
+                    set_clauses = []
+                    params = []
+                    if '✅ WA Sent' in edited_df.columns:
+                        set_clauses.append("wa_sent = ?")
+                        params.append(1 if row.get('✅ WA Sent', False) else 0)
+                    if '✅ Free WA Sent' in edited_df.columns:
+                        set_clauses.append("free_wa_sent = ?")
+                        params.append(1 if row.get('✅ Free WA Sent', False) else 0)
+                    if '📨 Email Sent' in edited_df.columns:
+                        set_clauses.append("email_sent = ?")
+                        params.append(1 if row.get('📨 Email Sent', False) else 0)
+                    if 'Status Update' in edited_df.columns:
+                        set_clauses.append("status_update = ?")
+                        params.append(str(row.get('Status Update', '')).strip())
+                    if 'Remarks' in edited_df.columns:
+                        set_clauses.append("remarks = ?")
+                        params.append(str(row.get('Remarks', '')).strip())
+                    if 'Extra Credits' in edited_df.columns:
+                        set_clauses.append("extra_credits = ?")
+                        ec = int(row.get('Extra Credits', 0)) if str(row.get('Extra Credits', '')).strip() not in ['', 'nan', 'None'] else 0
+                        params.append(ec)
 
-                    conn.execute('''
-                        INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, status_update, remarks, extra_credits)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(phone) DO UPDATE SET
-                            wa_sent = excluded.wa_sent,
-                            free_wa_sent = excluded.free_wa_sent,
-                            email_sent = excluded.email_sent,
-                            status_update = excluded.status_update,
-                            remarks = excluded.remarks,
-                            extra_credits = excluded.extra_credits
-                    ''', (p, w, fw, e, su, r, ec))
+                    if set_clauses:
+                        sql = f'''
+                            INSERT INTO customer_interactions (phone)
+                            VALUES (?)
+                            ON CONFLICT(phone) DO UPDATE SET {", ".join(set_clauses)}
+                        '''
+                        conn.execute(sql, [p] + params)
                 conn.commit()
                 st.success(f"✅ Successfully saved {len(edited_indices)} customer changes to database!")
                 time.sleep(1)
