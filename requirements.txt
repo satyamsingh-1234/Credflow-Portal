@@ -1,6 +1,8 @@
-# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.2-white-card-header
+# Streamlit Community Cloud Build Trigger: 2026-10-14-v4.3-credflow-favicon
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.15.0
 openpyxl>=3.1.0
 requests>=2.28.0
+Pillow>=10.0.0
+

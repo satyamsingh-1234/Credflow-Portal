@@ -14,14 +14,20 @@ import json
 import base64
 import requests
 from desktop_version_tracker import render_desktop_version_tracker
+from PIL import Image
 
 logo_path = os.path.join(os.path.dirname(__file__), "credflow_logo.png")
 if not os.path.exists(logo_path):
     logo_path = r"C:\Users\ss002\.gemini\antigravity\scratch\credflow_ppt\credflow_logo.png"
 
+try:
+    portal_favicon = Image.open(logo_path) if os.path.exists(logo_path) else "⚡"
+except Exception:
+    portal_favicon = "⚡"
+
 st.set_page_config(
-    page_title="CredFlow | Customer Adoption & Credit Analytics Portal",
-    page_icon="⚡",
+    page_title="CredFlow | Customer Operations & Usage Portal",
+    page_icon=portal_favicon,
     layout="wide",
     initial_sidebar_state="expanded"
 )
