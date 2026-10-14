@@ -1,4 +1,4 @@
-# Streamlit Community Cloud Build Trigger: 2026-10-14-v3.7-remove-base-extra-total-credits
+# Streamlit Community Cloud Build Trigger: 2026-10-14-v3.8-subtabs-clean-ui
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.15.0

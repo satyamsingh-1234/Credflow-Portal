@@ -2554,177 +2554,293 @@ def render_dashboard(df_sales, prefix):
         inter_cols = [c for c in ['phone', 'call_status', 'issue_type', 'plan_of_action', 'remarks', 'follow_up', 'last_call_at'] if c in interactions_dash.columns]
         filtered_export = pd.merge(filtered_export, interactions_dash[inter_cols], on='phone', how='left')
 
-    # ── OVERALL DASHBOARD ──────────────────────────────────────────────
-    st.markdown("---")
-    d_c1, d_c2 = st.columns([3, 1])
-    with d_c1:
-        st.subheader("📊 Overall Dashboard")
-    with d_c2:
-        excel_dash = to_excel_download(filtered_export, sheet_name="Dashboard Data")
-        st.download_button("📥 Export Filtered Data", data=excel_dash, file_name="Dashboard_Filtered_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-
-    # Compute per-customer stats from eval_df (one record per phone per cohort batch)
-    dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last').copy()
-    cp_mask = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
-    channel_partner = int(cp_mask.sum())
-
-    # Exclude Channel Partners from usage health tracking as requested
-    trackable_df = dash_df[~cp_mask].copy()
-    trackable_cx = len(trackable_df)
-
-    not_started = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
-    no_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
-    low_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
-    very_good = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
-    proper_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Proper Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
-    no_data = max(0, trackable_cx - not_started - no_usage - low_usage - proper_usage - very_good)
-
-    dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    trackable_df['phone'] = trackable_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-    db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
-    trackable_df = trackable_df.drop(columns=[c for c in db_cols_dash if c in trackable_df.columns], errors='ignore')
-    dash_merged = pd.merge(trackable_df, interactions_dash, on='phone', how='left')
-
-    wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
-    free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
-    email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
-
-    # ── ROW 1: KPI Cards ──
-    k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
-    k1.metric("👥 Trackable Customers", trackable_cx, delta=f"Excl. {channel_partner} CP" if channel_partner else None, delta_color="off", help=f"Total: {unique_cx} records (including {channel_partner} Channel Partners)")
-    k2.metric("🌟 Very Good Usage", very_good, delta=f"{round(very_good/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
-    k3.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
-    k4.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
-    k5.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
-    k6.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
-    k7.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
-
-    # ── ROW 2: Outreach KPIs ──
-    o1, o2, o3, o4 = st.columns(4)
-    o1.metric("📩 WA API Sent", wa_sent_count, delta=f"{round(wa_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
-    o2.metric("💬 Free WA Sent", free_wa_count, delta=f"{round(free_wa_count/trackable_cx*100)}%" if trackable_cx else "0%")
-    o3.metric("📧 Emails Sent", email_sent_count, delta=f"{round(email_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
-    total_reached = len(dash_merged[(dash_merged['wa_sent'].fillna(0).astype(bool)) | (dash_merged['free_wa_sent'].fillna(0).astype(bool)) | (dash_merged['email_sent'].fillna(0).astype(bool))])
-    not_reached = trackable_cx - total_reached
-    o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
-
-    # ── ROW 3: Charts ──
-    ch1, ch2 = st.columns(2)
-
-    with ch1:
-        usage_data = pd.DataFrame({
-            'Status': ['Very Good Usage 🌟', 'Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪'],
-            'Count': [very_good, proper_usage, low_usage, no_usage, not_started]
-        })
-        if no_data > 0:
-            usage_data = pd.concat([usage_data, pd.DataFrame({'Status': ['No Data'], 'Count': [no_data]})], ignore_index=True)
-        usage_data = usage_data[usage_data['Count'] > 0]
-        fig_usage = px.pie(
-            usage_data, values='Count', names='Status',
-            title='Customer Usage Health Breakdown (Excl. Channel Partners)',
-            color='Status',
-            color_discrete_map={
-                'Very Good Usage 🌟': '#059669',
-                'Proper Usage 🟢': '#10B981',
-                'Low Usage 🟡': '#F59E0B',
-                'No Usage 🔴': '#EF4444',
-                'Not Started / Blank ⚪': '#94A3B8',
-                'No Data': '#D1D5DB'
-            },
-            hole=0.45
-        )
-        fig_usage.update_traces(textposition='inside', textinfo='value+percent')
-        fig_usage.update_layout(height=350, margin=dict(t=40, b=20, l=20, r=20))
-        st.plotly_chart(fig_usage, use_container_width=True)
-
-    with ch2:
-        if 'plan name' in trackable_df.columns:
-            plan_counts = trackable_df['plan name'].dropna().value_counts().reset_index()
-            plan_counts.columns = ['Plan', 'Customers']
-            plan_counts = plan_counts[plan_counts['Plan'].str.strip() != '']
-            if not plan_counts.empty:
-                fig_plan = px.bar(
-                    plan_counts.head(10), x='Customers', y='Plan',
-                    title='Top Plans by Customer Count',
-                    orientation='h',
-                    color='Customers',
-                    color_continuous_scale='Blues'
-                )
-                fig_plan.update_layout(
-                    height=350, margin=dict(t=40, b=20, l=20, r=20),
-                    yaxis={'categoryorder': 'total ascending'},
-                    showlegend=False
-                )
-                st.plotly_chart(fig_plan, use_container_width=True)
-            else:
-                st.info("No plan data to display.")
-
-    # ── ROW 4: Outreach Progress Bar ──
-    if trackable_cx > 0:
-        pct_reached = round(total_reached / trackable_cx * 100)
-        st.markdown(f"""
-        <div style="background:#f3f4f6;border-radius:10px;padding:4px;margin:10px 0;">
-            <div style="background:linear-gradient(90deg,#3B82F6,#10B981);width:{pct_reached}%;padding:10px 15px;border-radius:8px;color:white;font-weight:bold;font-size:14px;text-align:center;min-width:60px;">
-                {pct_reached}% Outreach Complete ({total_reached}/{trackable_cx})
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # ── ROW 5: Usage Health Scoring Matrix Guide (Presentation Expander) ──
-    with st.expander("ℹ️ How Usage Health Score is Calculated (Scoring Logic & Rules Guide)", expanded=False):
-        st.markdown("""
-        ### 📊 CredFlow Customer Usage Health Scoring Model
-
-        #### ⭐ Special Override Rule (Lite / Basic Plans):
-        - **Rule 1 (Lite Plan Exemption)**: For **Lite / Basic / Starter** plans, if **App Login in last 7 days = `Yes`** **AND** **Last Sync in 7 days = `Yes`**, the customer is classified directly as **`🌟 Very Good Usage`** *(Proper Usage + App Login within 7 days)*.
-
-        ---
-
-        #### 🎯 Active 3-Parameter Scoring Model (For all other plans / Fallback):
-        Customer health is calculated dynamically across **3 Active Parameters** (Maximum Score = **6 Points**):
-        
-        | Parameter | Condition / Tier | Points | Missing / Blank Data Rule |
-        | :--- | :--- | :---: | :---: |
-        | **1. App Login** | `Yes` (Logged in within 7 days)<br>`No` / `None` | **+2 Points**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | **2. Last Sync** | `Yes` (Synced within 7 days)<br>`No` / `None` | **+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Premium / BVP Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
-        | *(4. Contact Details)* | *(Currently deferred / optional - does not penalize score)* | *N/A* | *Excluded from score calculation* |
-
-        ---
-
-        ### 🚦 Health Category Classification Rules:
-        - 🌟 **Very Good Usage (Proper Usage criteria + App Login within 7 days Mandatory)**: Score ≥ 4 (or Lite exemption) AND App Login in last 7 days = `Yes`.
-        - 🟢 **Proper Usage (Score ≥ 4, but App Login in last 7 days = `No`)**: High credit / sync usage but mobile app login pending.
-        - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
-        - 🔴 **No Usage (Score = 0)**: Inactive tracked customers *(Account active/connected, but 0 credits used and out of sync > 7 days)*.
-        - ⚪ **Not Started / Blank Setup**: Customers with Blank Last Sync, Blank App Login, and 0 Credits *(Initial desktop sync/setup pending or not initiated)*.
-        
-        > 💡 **Presentation Note**: Blank and 0 are strictly segregated. Missing/untracked sync records are kept in **Not Started ⚪** and excluded from **No Usage 🔴** to ensure 100% accurate health tracking.
-        """)
-
-    st.markdown("---")
-
-    st.markdown("---")
-    # ── END OVERALL DASHBOARD ──────────────────────────────────────────
-
+    # ── MULTI-TAB ARCHITECTURE (Clean UI / Zero Vertical Scroll) ──
     features_grouped = eval_df.groupby(dedup_cohort_cols)['feature'].apply(lambda x: ', '.join(x.dropna().unique())).reset_index()
     features_grouped = features_grouped.rename(columns={'feature': 'All Features'})
     cx_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last')
     cx_df = cx_df.drop(columns=['All Features'], errors='ignore')
     cx_df = pd.merge(cx_df, features_grouped, on=dedup_cohort_cols, how='left')
 
-    try:
-        render_crm(cx_df)
-    except Exception as e:
-        st.error(f"CRM Crash: {e}")
-        import traceback
-        st.code(traceback.format_exc())
+    sub_kpi, sub_crm, sub_tools = st.tabs([
+        "📊 KPI Overview",
+        "👥 CRM Table",
+        "🛠️ Outreach & Support Tools"
+    ])
+
+    with sub_kpi:
+        d_c1, d_c2 = st.columns([3, 1])
+        with d_c1:
+            st.subheader("📊 Executive KPI & Usage Summary")
+        with d_c2:
+            excel_dash = to_excel_download(filtered_export, sheet_name="Dashboard Data")
+            st.download_button("📥 Export Filtered Data", data=excel_dash, file_name="Dashboard_Filtered_Data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+        # Compute per-customer stats from eval_df (one record per phone per cohort batch)
+        dash_df = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last').copy()
+        cp_mask = dash_df['Usage check'].astype(str).str.contains('Channel Partner|Partner', na=False)
+        channel_partner = int(cp_mask.sum())
+
+        # Exclude Channel Partners from usage health tracking as requested
+        trackable_df = dash_df[~cp_mask].copy()
+        trackable_cx = len(trackable_df)
+
+        not_started = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+        no_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Not Started|Blank', na=False)])
+        low_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Low Usage', na=False)])
+        very_good = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+        proper_usage = len(trackable_df[trackable_df['Usage check'].astype(str).str.contains('Proper Usage', na=False) & ~trackable_df['Usage check'].astype(str).str.contains('Very Good Usage', na=False)])
+        no_data = max(0, trackable_cx - not_started - no_usage - low_usage - proper_usage - very_good)
+
+        dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        trackable_df['phone'] = trackable_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
+        db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
+        trackable_df = trackable_df.drop(columns=[c for c in db_cols_dash if c in trackable_df.columns], errors='ignore')
+        dash_merged = pd.merge(trackable_df, interactions_dash, on='phone', how='left')
+
+        wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
+        free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
+        email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
+
+        # ── ROW 1: KPI Cards ──
+        k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
+        k1.metric("👥 Trackable Customers", trackable_cx, delta=f"Excl. {channel_partner} CP" if channel_partner else None, delta_color="off", help=f"Total: {unique_cx} records (including {channel_partner} Channel Partners)")
+        k2.metric("🌟 Very Good Usage", very_good, delta=f"{round(very_good/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
+        k3.metric("🟢 Proper Usage", proper_usage, delta=f"{round(proper_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="normal")
+        k4.metric("🟡 Low Usage", low_usage, delta=f"{round(low_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+        k5.metric("🔴 No Usage", no_usage, delta=f"{round(no_usage/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
+        k6.metric("⚪ Not Started (Blank)", not_started, delta=f"{round(not_started/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="off")
+        k7.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
+
+        # ── ROW 2: Outreach KPIs ──
+        o1, o2, o3, o4 = st.columns(4)
+        o1.metric("📩 WA API Sent", wa_sent_count, delta=f"{round(wa_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
+        o2.metric("💬 Free WA Sent", free_wa_count, delta=f"{round(free_wa_count/trackable_cx*100)}%" if trackable_cx else "0%")
+        o3.metric("📧 Emails Sent", email_sent_count, delta=f"{round(email_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
+        total_reached = len(dash_merged[(dash_merged['wa_sent'].fillna(0).astype(bool)) | (dash_merged['free_wa_sent'].fillna(0).astype(bool)) | (dash_merged['email_sent'].fillna(0).astype(bool))])
+        not_reached = trackable_cx - total_reached
+        o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
+
+        # ── ROW 3: Charts ──
+        ch1, ch2 = st.columns(2)
+
+        with ch1:
+            usage_data = pd.DataFrame({
+                'Status': ['Very Good Usage 🌟', 'Proper Usage 🟢', 'Low Usage 🟡', 'No Usage 🔴', 'Not Started / Blank ⚪'],
+                'Count': [very_good, proper_usage, low_usage, no_usage, not_started]
+            })
+            if no_data > 0:
+                usage_data = pd.concat([usage_data, pd.DataFrame({'Status': ['No Data'], 'Count': [no_data]})], ignore_index=True)
+            usage_data = usage_data[usage_data['Count'] > 0]
+            fig_usage = px.pie(
+                usage_data, values='Count', names='Status',
+                title='Customer Usage Health Breakdown (Excl. Channel Partners)',
+                color='Status',
+                color_discrete_map={
+                    'Very Good Usage 🌟': '#059669',
+                    'Proper Usage 🟢': '#10B981',
+                    'Low Usage 🟡': '#F59E0B',
+                    'No Usage 🔴': '#EF4444',
+                    'Not Started / Blank ⚪': '#94A3B8',
+                    'No Data': '#D1D5DB'
+                },
+                hole=0.45
+            )
+            fig_usage.update_traces(textposition='inside', textinfo='value+percent')
+            fig_usage.update_layout(height=350, margin=dict(t=40, b=20, l=20, r=20))
+            st.plotly_chart(fig_usage, use_container_width=True)
+
+        with ch2:
+            if 'plan name' in trackable_df.columns:
+                plan_counts = trackable_df['plan name'].dropna().value_counts().reset_index()
+                plan_counts.columns = ['Plan', 'Customers']
+                plan_counts = plan_counts[plan_counts['Plan'].str.strip() != '']
+                if not plan_counts.empty:
+                    fig_plan = px.bar(
+                        plan_counts.head(10), x='Customers', y='Plan',
+                        title='Top Plans by Customer Count',
+                        orientation='h',
+                        color='Customers',
+                        color_continuous_scale='Blues'
+                    )
+                    fig_plan.update_layout(
+                        height=350, margin=dict(t=40, b=20, l=20, r=20),
+                        yaxis={'categoryorder': 'total ascending'},
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_plan, use_container_width=True)
+                else:
+                    st.info("No plan data to display.")
+
+        # ── ROW 4: Outreach Progress Bar ──
+        if trackable_cx > 0:
+            pct_reached = round(total_reached / trackable_cx * 100)
+            st.markdown(f"""
+            <div style="background:#f3f4f6;border-radius:10px;padding:4px;margin:10px 0;">
+                <div style="background:linear-gradient(90deg,#3B82F6,#10B981);width:{pct_reached}%;padding:10px 15px;border-radius:8px;color:white;font-weight:bold;font-size:14px;text-align:center;min-width:60px;">
+                    {pct_reached}% Outreach Complete ({total_reached}/{trackable_cx})
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ── ROW 5: Usage Health Scoring Matrix Guide (Presentation Expander) ──
+        with st.expander("ℹ️ How Usage Health Score is Calculated (Scoring Logic & Rules Guide)", expanded=False):
+            st.markdown("""
+            ### 📊 CredFlow Customer Usage Health Scoring Model
+
+            #### ⭐ Special Override Rule (Lite / Basic Plans):
+            - **Rule 1 (Lite Plan Exemption)**: For **Lite / Basic / Starter** plans, if **App Login in last 7 days = `Yes`** **AND** **Last Sync in 7 days = `Yes`**, the customer is classified directly as **`🌟 Very Good Usage`** *(Proper Usage + App Login within 7 days)*.
+
+            ---
+
+            #### 🎯 Active 3-Parameter Scoring Model (For all other plans / Fallback):
+            Customer health is calculated dynamically across **3 Active Parameters** (Maximum Score = **6 Points**):
+            
+            | Parameter | Condition / Tier | Points | Missing / Blank Data Rule |
+            | :--- | :--- | :---: | :---: |
+            | **1. App Login** | `Yes` (Logged in within 7 days)<br>`No` / `None` | **+2 Points**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+            | **2. Last Sync** | `Yes` (Synced within 7 days)<br>`No` / `None` | **+1 Point**<br>0 Points | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+            | **3. CP Usage (Plan-Wise Dynamic)** | **Lite/Basic Tier**: `> 100` (**+3 Pts**), `30-100` (**+2 Pts**), `< 30` (**0 Pts**)<br>**Saver/Pro Tier**: `> 500` (**+3 Pts**), `200-500` (**+2 Pts**), `< 200` (**0 Pts**)<br>**Premium / BVP Tier**: `> 1000` (**+3 Pts**), `500-1000` (**+2 Pts**), `< 500` (**0 Pts**) | **+3 / +2 / 0** | Missing/Blank cell ➔ **0 Points** (`"None"`) |
+            | *(4. Contact Details)* | *(Currently deferred / optional - does not penalize score)* | *N/A* | *Excluded from score calculation* |
+
+            ---
+
+            ### 🚦 Health Category Classification Rules:
+            - 🌟 **Very Good Usage (Proper Usage criteria + App Login within 7 days Mandatory)**: Score ≥ 4 (or Lite exemption) AND App Login in last 7 days = `Yes`.
+            - 🟢 **Proper Usage (Score ≥ 4, but App Login in last 7 days = `No`)**: High credit / sync usage but mobile app login pending.
+            - 🟡 **Low Usage (Score = 1 to 3)**: Customers with basic sync or minimal usage who need setup assistance & follow-up.
+            - 🔴 **No Usage (Score = 0)**: Inactive tracked customers *(Account active/connected, but 0 credits used and out of sync > 7 days)*.
+            - ⚪ **Not Started / Blank Setup**: Customers with Blank Last Sync, Blank App Login, and 0 Credits *(Initial desktop sync/setup pending or not initiated)*.
+            
+            > 💡 **Presentation Note**: Blank and 0 are strictly segregated. Missing/untracked sync records are kept in **Not Started ⚪** and excluded from **No Usage 🔴** to ensure 100% accurate health tracking.
+            """)
+
+    with sub_crm:
+        try:
+            render_crm(cx_df)
+        except Exception as e:
+            st.error(f"CRM Crash: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    with sub_tools:
+        try:
+            render_outreach_tools(cx_df)
+        except Exception as e:
+            st.error(f"Tools Crash: {e}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
 
 
-@st.fragment
-def render_crm(cx_df):
+def render_outreach_tools(cx_df):
+    st.subheader("🛠️ Outreach & Support Automation Tools")
+    st.caption("Testing sandboxes, support ticket dispatchers, and personal WhatsApp device pairing.")
+
+    # ── NO USAGE SUPPORT TICKET DESK ──
+    no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
+    
+    with st.expander(f"🎫 **Support Ticket Desk — No Usage Customers ({len(no_usage_cx_all)} Total)**", expanded=True):
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%); border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <b style="color: #991B1B; font-size: 15px;">🚨 Support Ticket Desk: Proactive Assistance Request</b>
+                    <p style="margin: 4px 0 0 0; color: #7F1D1D; font-size: 13px;">
+                        Yeh <b>{len(no_usage_cx_all)} customers</b> software actively use nahi kar rahe hain.
+                        Neeche diye button se har customer ka <b>alag individual support ticket (total {len(no_usage_cx_all)} emails)</b> seedhe <b>support@credflow.in</b> ko dispatch hoga from <b>satyam.kumar@credflow.in</b>.
+                    </p>
+                </div>
+                <span style="background: #EF4444; color: white; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 12px;">
+                    {len(no_usage_cx_all)} Inactive Accounts
+                </span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Check DB status for tickets
+        try:
+            ticket_db_df = pd.read_sql("SELECT phone, support_ticket_sent, last_support_ticket_at FROM customer_interactions WHERE support_ticket_sent = 1", conn)
+            ticket_sent_phones = set(ticket_db_df['phone'].astype(str).str.replace('.0', '').str.strip())
+        except Exception:
+            ticket_sent_phones = set()
+            
+        no_usage_cx_all['Ticket Status'] = no_usage_cx_all['phone'].apply(
+            lambda p: "✅ Ticket Created" if str(p).replace('.0', '').strip() in ticket_sent_phones else "⏳ Pending"
+        )
+        
+        tk_col1, tk_col2 = st.columns([2, 1])
+        with tk_col1:
+            ticket_agent_email = st.text_input("Sender / From Email Address", value="satyam.kumar@credflow.in", key="tools_nu_ticket_agent_email")
+        with tk_col2:
+            st.text_input("Target Support Email", value="support@credflow.in", disabled=True, key="tools_nu_target_support_email")
+            
+        pending_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'])
+        created_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '✅ Ticket Created'])
+        
+        st.markdown(f"""
+        <div style="display: flex; gap: 15px; margin-bottom: 12px; font-size: 13px; font-weight: 600;">
+            <span style="color: #DC2626;">⏳ Pending Tickets: {pending_cnt}</span>
+            <span style="color: #16A34A;">✅ Already Created: {created_cnt}</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        btn_c1, btn_c2, btn_c3 = st.columns([2.5, 2, 1.5])
+        with btn_c1:
+            send_all_tickets = st.button(f"🚀 Dispatch All {len(no_usage_cx_all)} Support Tickets", type="primary", use_container_width=True, key="tools_btn_send_all_nu_tickets")
+        with btn_c2:
+            send_pending_tickets = st.button(f"⚡ Dispatch Pending Only ({pending_cnt})", use_container_width=True, key="tools_btn_send_pending_nu_tickets")
+        with btn_c3:
+            test_1_ticket = st.button("🧪 Test 1 Sample Ticket", use_container_width=True, key="tools_btn_test_1_nu_ticket")
+            
+        # Preview Table
+        preview_cols = ['Name', 'phone', 'email', 'plan name', 'Last Sync in 7 days', 'Ticket Status']
+        st.dataframe(no_usage_cx_all[[c for c in preview_cols if c in no_usage_cx_all.columns]], use_container_width=True, hide_index=True)
+        
+        if test_1_ticket:
+            if not no_usage_cx_all.empty:
+                sample_row = no_usage_cx_all.iloc[0].to_dict()
+                with st.spinner(f"Sending test ticket for {sample_row.get('Name')}..."):
+                    succ, err = send_no_usage_support_ticket(sample_row, agent_email=ticket_agent_email)
+                if succ:
+                    st.success(f"✅ Sample Support Ticket sent successfully to support@credflow.in for {sample_row.get('Name')} ({sample_row.get('phone')})!")
+                else:
+                    st.error(f"❌ Failed to send sample ticket: {err}")
+            else:
+                st.info("No customers found in No Usage category.")
+                
+        targets_to_send = None
+        if send_all_tickets:
+            targets_to_send = no_usage_cx_all.to_dict('records')
+        elif send_pending_tickets:
+            targets_to_send = no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'].to_dict('records')
+            
+        if targets_to_send:
+            if not targets_to_send:
+                st.info("Sabhi customers ke tickets pehle se create ho chuke hain!")
+            else:
+                ph_ui, update_ui = create_progress_ui("Sending Support Tickets to support@credflow.in")
+                succ_flag, succ_phones, failed = send_bulk_no_usage_support_tickets(targets_to_send, agent_email=ticket_agent_email, progress_callback=update_ui)
+                
+                if succ_phones:
+                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    for p in succ_phones:
+                        conn.execute('''
+                            INSERT INTO customer_interactions (phone, support_ticket_sent, last_support_ticket_at)
+                            VALUES (?, 1, ?)
+                            ON CONFLICT(phone) DO UPDATE SET support_ticket_sent = 1, last_support_ticket_at = ?
+                        ''', (p, now_str, now_str))
+                    conn.commit()
+                    st.success(f"🎉 Successfully created & sent {len(succ_phones)} individual Support Tickets to support@credflow.in!")
+                    if failed:
+                        st.warning(f"⚠️ {len(failed)} tickets failed to send: {', '.join(failed[:3])}")
+                    time.sleep(2)
+                    st.rerun()
+                else:
+                    st.error(f"❌ Failed to send tickets: {failed}")
+
+    st.markdown("---")
+
     # ── TEST SANDBOX ──────────────────────────────────────────────
     with st.expander("🧪 **Test Sandbox — Single Message Tester (WhatsApp & Email)**", expanded=False):
         st.markdown("💡 *Bulk sending se pehle apne number/email par test message bhej kar verfiy karein.*")
@@ -2775,7 +2891,7 @@ def render_crm(cx_df):
             with tc4:
                 test_wa_credits = st.text_input("Raw Credits / Used", value="500", key="test_wa_credits")
                 
-            if st.button("🚀 Send Test WhatsApp Message", type="primary", use_container_width=True):
+            if st.button("🚀 Send Test WhatsApp Message", type="primary", use_container_width=True, key="btn_test_wa_modal"):
                 if not test_wa_phone or len(test_wa_phone.strip()) < 10:
                     st.warning("Kripya valid 10-digit mobile number dalein.")
                 else:
@@ -2799,7 +2915,7 @@ def render_crm(cx_df):
             with tec4:
                 test_email_plan = st.text_input("Plan Name", value="Premium Plan", key="test_email_plan")
                 
-            if st.button("🚀 Send Test Email", type="primary", use_container_width=True):
+            if st.button("🚀 Send Test Email", type="primary", use_container_width=True, key="btn_test_email_modal"):
                 if not test_email_addr or "@" not in test_email_addr:
                     st.warning("Kripya valid email address dalein.")
                 else:
@@ -2847,113 +2963,16 @@ def render_crm(cx_df):
                     st.success("✅ Test Support Ticket dispatched successfully to support@credflow.in!")
                 else:
                     st.error(f"❌ Failed to dispatch ticket: {res}")
-    # ──────────────────────────────────────────────────────────────
 
     st.markdown("---")
-    st.markdown("### 👥 Customer Operations & CRM Registry")
 
-    # ── NO USAGE SUPPORT TICKET DESK ──
-    no_usage_cx_all = cx_df[cx_df['Usage check'].astype(str).str.contains('No Usage', na=False) & ~cx_df['Usage check'].astype(str).str.contains('Not Started|Blank|Partner', na=False)].copy()
-    
-    with st.expander(f"🎫 **Support Ticket Desk — No Usage Customers ({len(no_usage_cx_all)} Total)**", expanded=False):
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%); border: 1.5px solid #FCA5A5; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div>
-                    <b style="color: #991B1B; font-size: 15px;">🚨 Support Ticket Desk: Proactive Assistance Request</b>
-                    <p style="margin: 4px 0 0 0; color: #7F1D1D; font-size: 13px;">
-                        Yeh <b>{len(no_usage_cx_all)} customers</b> software actively use nahi kar rahe hain.
-                        Neeche diye button se har customer ka <b>alag individual support ticket (total {len(no_usage_cx_all)} emails)</b> seedhe <b>support@credflow.in</b> ko dispatch hoga from <b>satyam.kumar@credflow.in</b>.
-                    </p>
-                </div>
-                <span style="background: #EF4444; color: white; font-weight: 700; font-size: 12px; padding: 4px 12px; border-radius: 12px;">
-                    {len(no_usage_cx_all)} Inactive Accounts
-                </span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Check DB status for tickets
-        try:
-            ticket_db_df = pd.read_sql("SELECT phone, support_ticket_sent, last_support_ticket_at FROM customer_interactions WHERE support_ticket_sent = 1", conn)
-            ticket_sent_phones = set(ticket_db_df['phone'].astype(str).str.replace('.0', '').str.strip())
-        except Exception:
-            ticket_sent_phones = set()
-            
-        no_usage_cx_all['Ticket Status'] = no_usage_cx_all['phone'].apply(
-            lambda p: "✅ Ticket Created" if str(p).replace('.0', '').strip() in ticket_sent_phones else "⏳ Pending"
-        )
-        
-        tk_col1, tk_col2 = st.columns([2, 1])
-        with tk_col1:
-            ticket_agent_email = st.text_input("Sender / From Email Address", value="satyam.kumar@credflow.in", key="nu_ticket_agent_email")
-        with tk_col2:
-            st.text_input("Target Support Email", value="support@credflow.in", disabled=True, key="nu_target_support_email")
-            
-        pending_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'])
-        created_cnt = len(no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '✅ Ticket Created'])
-        
-        st.markdown(f"""
-        <div style="display: flex; gap: 15px; margin-bottom: 12px; font-size: 13px; font-weight: 600;">
-            <span style="color: #DC2626;">⏳ Pending Tickets: {pending_cnt}</span>
-            <span style="color: #16A34A;">✅ Already Created: {created_cnt}</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        btn_c1, btn_c2, btn_c3 = st.columns([2.5, 2, 1.5])
-        with btn_c1:
-            send_all_tickets = st.button(f"🚀 Dispatch All {len(no_usage_cx_all)} Support Tickets", type="primary", use_container_width=True, key="btn_send_all_nu_tickets")
-        with btn_c2:
-            send_pending_tickets = st.button(f"⚡ Dispatch Pending Only ({pending_cnt})", use_container_width=True, key="btn_send_pending_nu_tickets")
-        with btn_c3:
-            test_1_ticket = st.button("🧪 Test 1 Sample Ticket", use_container_width=True, key="btn_test_1_nu_ticket")
-            
-        # Preview Table
-        preview_cols = ['Name', 'phone', 'email', 'plan name', 'Last Sync in 7 days', 'Ticket Status']
-        st.dataframe(no_usage_cx_all[[c for c in preview_cols if c in no_usage_cx_all.columns]], use_container_width=True, hide_index=True)
-        
-        if test_1_ticket:
-            if not no_usage_cx_all.empty:
-                sample_row = no_usage_cx_all.iloc[0].to_dict()
-                with st.spinner(f"Sending test ticket for {sample_row.get('Name')}..."):
-                    succ, err = send_no_usage_support_ticket(sample_row, agent_email=ticket_agent_email)
-                if succ:
-                    st.success(f"✅ Sample Support Ticket sent successfully to support@credflow.in for {sample_row.get('Name')} ({sample_row.get('phone')})!")
-                else:
-                    st.error(f"❌ Failed to send sample ticket: {err}")
-            else:
-                st.info("No customers found in No Usage category.")
-                
-        targets_to_send = None
-        if send_all_tickets:
-            targets_to_send = no_usage_cx_all.to_dict('records')
-        elif send_pending_tickets:
-            targets_to_send = no_usage_cx_all[no_usage_cx_all['Ticket Status'] == '⏳ Pending'].to_dict('records')
-            
-        if targets_to_send:
-            if not targets_to_send:
-                st.info("Sabhi customers ke tickets pehle se create ho chuke hain!")
-            else:
-                ph_ui, update_ui = create_progress_ui("Sending Support Tickets to support@credflow.in")
-                succ_flag, succ_phones, failed = send_bulk_no_usage_support_tickets(targets_to_send, agent_email=ticket_agent_email, progress_callback=update_ui)
-                
-                if succ_phones:
-                    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    for p in succ_phones:
-                        conn.execute('''
-                            INSERT INTO customer_interactions (phone, support_ticket_sent, last_support_ticket_at)
-                            VALUES (?, 1, ?)
-                            ON CONFLICT(phone) DO UPDATE SET support_ticket_sent = 1, last_support_ticket_at = ?
-                        ''', (p, now_str, now_str))
-                    conn.commit()
-                    st.success(f"🎉 Successfully created & sent {len(succ_phones)} individual Support Tickets to support@credflow.in!")
-                    if failed:
-                        st.warning(f"⚠️ {len(failed)} tickets failed to send: {', '.join(failed[:3])}")
-                    time.sleep(2)
-                    st.rerun()
-                else:
-                    st.error(f"❌ Failed to send tickets: {failed}")
+    # ── LINK PERSONAL WHATSAPP ──
+    with st.expander("📲 **Link Personal WhatsApp (100% Free Auto-Send via QR Scan)**", expanded=False):
+        render_personal_wa_connector(card_key="tools_tab")
 
+
+@st.fragment
+def render_crm(cx_df):
     def get_base_credits(plan_name):
         pn = str(plan_name).upper()
         if 'BVP' in pn: return 10000
