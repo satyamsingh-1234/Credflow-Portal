@@ -3038,7 +3038,7 @@ def render_crm(cx_df):
             'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check', 'Status Update']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -3168,12 +3168,7 @@ def render_crm(cx_df):
                 "All Features": st.column_config.TextColumn("Plan Features 🎁", disabled=True),
                 "App login done in last 7 days": st.column_config.TextColumn("Login 7d", disabled=True),
                 "Last Sync in 7 days": st.column_config.TextColumn("Sync 7d", disabled=True),
-                "CP Usage in last 7 days": st.column_config.TextColumn("CP Usage 7d", disabled=True),
-                "Status Update": st.column_config.SelectboxColumn(
-                    "Status Update 📢",
-                    options=all_status_opts,
-                    width="medium"
-                )
+                "CP Usage in last 7 days": st.column_config.TextColumn("CP Usage 7d", disabled=True)
             },
             disabled=["Name", "phone", "email", "plan name", "Usage check", "App login done in last 7 days", "Last Sync in 7 days", "CP Usage in last 7 days"]
         )
