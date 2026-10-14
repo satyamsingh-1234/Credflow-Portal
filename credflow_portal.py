@@ -3038,7 +3038,7 @@ def render_crm(cx_df):
             'Upload_Batch': '📁 File / Batch'
         })
 
-        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'Base Credits', 'Extra Credits', 'Total Credits', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check']
+        cols_to_keep = ['Name', 'phone', 'email', 'WhatsApp', '✅ WA Sent', '✅ Free WA Sent', '📨 Email Sent', 'plan name', '📁 File / Batch', 'All Features', 'raw_credits', 'App login done in last 7 days', 'Last Sync in 7 days', 'CP Usage in last 7 days', 'Usage check']
         existing_cols = [c for c in cols_to_keep if c in call_df.columns]
         ui_df = call_df[existing_cols]
 
@@ -3161,9 +3161,6 @@ def render_crm(cx_df):
                 "✅ WA Sent": st.column_config.CheckboxColumn("✅ WA API", disabled=False),
                 "✅ Free WA Sent": st.column_config.CheckboxColumn("✅ Free WA", disabled=False),
                 "📨 Email Sent": st.column_config.CheckboxColumn("📨 Email Sent", disabled=False),
-                "Base Credits": st.column_config.NumberColumn("Base Credits", disabled=True),
-                "Extra Credits": st.column_config.NumberColumn("Extra Credits (Edit Me)✏️", default=0, min_value=0),
-                "Total Credits": st.column_config.NumberColumn("Total Credits", disabled=True),
                 "raw_credits": st.column_config.TextColumn("Credits Used", disabled=True),
                 "All Features": st.column_config.TextColumn("Plan Features 🎁", disabled=True),
                 "App login done in last 7 days": st.column_config.TextColumn("Login 7d", disabled=True),
@@ -3353,7 +3350,7 @@ def render_crm(cx_df):
                     e = 1 if row.get('📨 Email Sent', False) else 0
                     su = str(row.get('Status Update', '')).strip()
                     r = str(row.get('Remarks', '')).strip()
-                    ec = int(row['Extra Credits']) if str(row.get('Extra Credits', '')).strip() not in ['', 'nan', 'None'] else 0
+                    ec = int(row.get('Extra Credits', 0)) if str(row.get('Extra Credits', '')).strip() not in ['', 'nan', 'None'] else 0
 
                     conn.execute('''
                         INSERT INTO customer_interactions (phone, wa_sent, free_wa_sent, email_sent, status_update, remarks, extra_credits)
