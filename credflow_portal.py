@@ -81,7 +81,7 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
-    TARGET_SCORING_VER = 'v20261014_clean_1060_official_restored'
+    TARGET_SCORING_VER = 'v20261015_clean_1060_live_update'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
     s_ver_row = cur.fetchone()
@@ -98,8 +98,8 @@ try:
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (TARGET_SCORING_VER,))
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Updated)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '15 Oct 2026, 05:55 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
 
         ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
@@ -1241,6 +1241,8 @@ def compute_usage_health(plan_name, c_val, sync_7d, login_7d, contact_val=0, is_
     if pts >= 4:
         if login_yes:
             return "Very Good Usage 🌟"
+        elif (login_7d in ["No", "None", "", None] or pd.isna(login_7d)) and cp_score >= 3 and c_val > 500 and sync_yes:
+            return "Very Good Usage 🌟"
         else:
             return "Proper Usage 🟢"
     elif pts >= 1:
@@ -2347,10 +2349,10 @@ def render_dashboard(df_sales, prefix):
             latest_file_name = str(recent_batches[-1])
 
     if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
-        latest_file_name = "Unified Master Sheet (July + August + September)"
+        latest_file_name = "Unified Master Sheet (July + August + September Updated)"
 
-    if not latest_update_time or '07 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
-        latest_update_time = "13 Oct 2026, 06:23 PM (Live & Synced)"
+    if not latest_update_time or '07 Oct' in str(latest_update_time) or '13 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
+        latest_update_time = "15 Oct 2026, 05:55 PM (Live & Synced)"
 
     if latest_file_name:
         st.markdown(f"""
@@ -4741,9 +4743,9 @@ if is_admin:
         if os.path.exists(csv_master):
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261014_clean_1060_official_restored') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '13 Oct 2026, 06:23 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261015_clean_1060_live_update') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Updated)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '15 Oct 2026, 05:55 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
             st.cache_data.clear()
             st.sidebar.success("✅ Database restored to July + August + September (1,060 Customers)!")
