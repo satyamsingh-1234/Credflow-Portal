@@ -81,7 +81,7 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
-    TARGET_SCORING_VER = 'v20261015_clean_1060_live_update'
+    TARGET_SCORING_VER = 'v20261017_excel_perfect_1069'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
     s_ver_row = cur.fetchone()
@@ -98,8 +98,8 @@ try:
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (TARGET_SCORING_VER,))
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Updated)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '15 Oct 2026, 05:55 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Verified)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '17 Oct 2026, 04:30 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
 
         ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
@@ -663,13 +663,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20261010_master_1062_final"):
+def fetch_history_batch(batch_name, cache_key="v20261017_excel_perfect_1069"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,)).drop_duplicates()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20261010_master_1062_final"):
+def fetch_all_history(cache_key="v20261017_excel_perfect_1069"):
     """Aggressively cache full master dataset read (5,621 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn).drop_duplicates()
@@ -2168,7 +2168,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20261010_master_1062_final"):
+def prepare_eval_df(df_sales, cache_key="v20261017_excel_perfect_1069"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.drop_duplicates().copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -2213,15 +2213,12 @@ def prepare_eval_df(df_sales, cache_key="v20261010_master_1062_final"):
         phone_clean = str(row.get('phone', '')).replace('.0', '').replace('+91', '').strip()
         comp_name = str(row.get('Name', row.get('company_name', ''))).lower()
 
+        existing_status = str(row.get('Usage check', '')).strip()
+        if existing_status in ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Channel Partner 🤝", "Not Started / Blank Setup ⚪"]:
+            return existing_status
+
         if phone_clean in CHANNEL_PARTNER_PHONES:
             return "Channel Partner 🤝"
-
-        if 'partner client' in comp_name or phone_clean == '9765652885':
-            return "No Usage 🔴"
-
-        # Explicit user rule: Ayush (8978102368) counted in Proper Usage
-        if phone_clean == '8978102368':
-            return "Proper Usage 🟢"
 
         # User's strict rule: Blank Setup ONLY when ALL THREE (sync, login, cp) are blank / no activity
         sync_raw = row.get('Last Sync in 7 days')
@@ -2240,8 +2237,6 @@ def prepare_eval_df(df_sales, cache_key="v20261010_master_1062_final"):
         plan_n = str(row.get('plan name', ''))
 
         existing_status = str(row.get('Usage check', '')).strip()
-        if existing_status == "Proper Usage 🟢" and l_val == "Yes":
-            return "Very Good Usage 🌟"
         if existing_status in ["Very Good Usage 🌟", "Proper Usage 🟢", "Low Usage 🟡", "No Usage 🔴", "Channel Partner 🤝", "Not Started / Blank Setup ⚪"]:
             return existing_status
 
@@ -2349,10 +2344,10 @@ def render_dashboard(df_sales, prefix):
             latest_file_name = str(recent_batches[-1])
 
     if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
-        latest_file_name = "Unified Master Sheet (July + August + September Updated)"
+        latest_file_name = "Unified Master Sheet (July + August + September Verified)"
 
-    if not latest_update_time or '07 Oct' in str(latest_update_time) or '13 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
-        latest_update_time = "15 Oct 2026, 05:55 PM (Live & Synced)"
+    if not latest_update_time or '07 Oct' in str(latest_update_time) or '13 Oct' in str(latest_update_time) or '15 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
+        latest_update_time = "17 Oct 2026, 04:30 PM (Live & Synced)"
 
     if latest_file_name:
         st.markdown(f"""
@@ -2545,7 +2540,7 @@ def render_dashboard(df_sales, prefix):
         eval_df = eval_df[eval_df['phone'].isin(valid_plan_phones)]
         
     # 4. Usage Health Filter (Strictly filter within current cohort/view)
-    dedup_cohort_cols = ['phone']
+    dedup_cohort_cols = ['phone', 'Upload_Batch'] if 'Upload_Batch' in eval_df.columns else ['phone']
     if usage_filt:
         latest_per_phone = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last')
         valid_usage_phones = latest_per_phone[latest_per_phone['Usage check'].isin(usage_filt)]['phone'].unique()
@@ -2560,8 +2555,8 @@ def render_dashboard(df_sales, prefix):
 
     # For table display, keep the rows corresponding to each customer's active batch to prevent double rows
     if 'phone' in filtered.columns and 'Upload_Batch' in filtered.columns:
-        latest_batch_per_phone = eval_df.drop_duplicates(subset=['phone'], keep='last')[['phone', 'Upload_Batch']]
-        filtered = pd.merge(filtered, latest_batch_per_phone, on=['phone', 'Upload_Batch'], how='inner')
+        latest_batch_per_phone = eval_df.drop_duplicates(subset=dedup_cohort_cols, keep='last')[dedup_cohort_cols]
+        filtered = pd.merge(filtered, latest_batch_per_phone, on=dedup_cohort_cols, how='inner')
 
     st.markdown(f"""
     <div style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 16px; margin: 10px 0 16px 0; color: #166534; font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between;">
@@ -4743,12 +4738,12 @@ if is_admin:
         if os.path.exists(csv_master):
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261015_clean_1060_live_update') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Updated)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '15 Oct 2026, 05:55 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261017_excel_perfect_1069') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Verified)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '17 Oct 2026, 04:30 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
             st.cache_data.clear()
-            st.sidebar.success("✅ Database restored to July + August + September (1,060 Customers)!")
+            st.sidebar.success("✅ Database restored to July + August + September (1,069 Customers)!")
             st.rerun()
 
 if st.sidebar.button("🔄 Refresh & Clear Cache", use_container_width=True):
@@ -4787,7 +4782,7 @@ with tab_dash:
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20261010_master_1062_final")
+            hist_df = fetch_all_history(cache_key="v20261017_excel_perfect_1069")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
