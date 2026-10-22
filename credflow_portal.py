@@ -81,7 +81,7 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
-    TARGET_SCORING_VER = 'v20261017_excel_perfect_1069'
+    TARGET_SCORING_VER = 'v20261022_fresh_sync_credit_lookup'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
     s_ver_row = cur.fetchone()
@@ -98,8 +98,8 @@ try:
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (TARGET_SCORING_VER,))
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Verified)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '17 Oct 2026, 04:30 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 22 Oct Credit & App Data)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '22 Oct 2026, 10:30 AM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
 
         ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
@@ -663,13 +663,13 @@ if os.path.exists(LOGO_PATH):
         logo_src = ""
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_history_batch(batch_name, cache_key="v20261017_excel_perfect_1069"):
+def fetch_history_batch(batch_name, cache_key="v20261022_fresh_sync_credit_lookup"):
     """Aggressively cache the massive history read to prevent UI slowdowns on filter changes."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history WHERE Upload_Batch = ?", temp_conn, params=(batch_name,)).drop_duplicates()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_all_history(cache_key="v20261017_excel_perfect_1069"):
+def fetch_all_history(cache_key="v20261022_fresh_sync_credit_lookup"):
     """Aggressively cache full master dataset read (5,621 rows) to make Overall Data & date filters instant."""
     with sqlite3.connect(DB_PATH, timeout=30.0) as temp_conn:
         return pd.read_sql("SELECT * FROM sales_plan_history", temp_conn).drop_duplicates()
@@ -2168,7 +2168,7 @@ def send_bulk_emails(selected_rows_data, progress_callback=None):
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def prepare_eval_df(df_sales, cache_key="v20261017_excel_perfect_1069"):
+def prepare_eval_df(df_sales, cache_key="v20261022_fresh_sync_credit_lookup"):
     """Caches the heavy groupby and string replacement operations so they do not run on every filter change."""
     filtered = df_sales.drop_duplicates().copy()
     filtered['phone'] = filtered['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -2344,10 +2344,10 @@ def render_dashboard(df_sales, prefix):
             latest_file_name = str(recent_batches[-1])
 
     if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
-        latest_file_name = "Unified Master Sheet (July + August + September Verified)"
+        latest_file_name = "Unified Master Sheet (Synced with 22 Oct Credit & App Data)"
 
     if not latest_update_time or '07 Oct' in str(latest_update_time) or '13 Oct' in str(latest_update_time) or '15 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
-        latest_update_time = "17 Oct 2026, 04:30 PM (Live & Synced)"
+        latest_update_time = "22 Oct 2026, 10:30 AM (Live & Synced)"
 
     if latest_file_name:
         st.markdown(f"""
@@ -4738,9 +4738,9 @@ if is_admin:
         if os.path.exists(csv_master):
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261017_excel_perfect_1069') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (July + August + September Verified)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '17 Oct 2026, 04:30 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261022_fresh_sync_credit_lookup') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 22 Oct Credit & App Data)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '22 Oct 2026, 10:30 AM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
             st.cache_data.clear()
             st.sidebar.success("✅ Database restored to July + August + September (1,069 Customers)!")
@@ -4782,7 +4782,7 @@ with tab_dash:
                 s_batches = pd.read_sql("SELECT DISTINCT Upload_Batch FROM sales_plan_history ORDER BY Upload_Batch DESC", conn)
 
         if not s_batches.empty:
-            hist_df = fetch_all_history(cache_key="v20261017_excel_perfect_1069")
+            hist_df = fetch_all_history(cache_key="v20261022_fresh_sync_credit_lookup")
             render_dashboard(hist_df, "dash_master")
         else:
             st.info("👋 Welcome! Kripya '⚙️ Data Management & Uploads' tab mein jaakar apni Master Data Excel/CSV upload karein.")
