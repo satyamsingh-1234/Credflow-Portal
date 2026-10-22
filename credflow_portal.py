@@ -131,24 +131,23 @@ try:
     if PERSISTENT_DB != REPO_DB and os.path.exists(REPO_DB):
         try:
             with sqlite3.connect(REPO_DB, timeout=10.0) as r_conn:
-                r_df = pd.read_sql("SELECT * FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '') OR (follow_up IS NOT NULL AND follow_up != '')", r_conn)
-            p_existing = [r[0] for r in conn.execute("SELECT phone FROM customer_interactions WHERE (call_status IS NOT NULL AND call_status != '') OR (remarks IS NOT NULL AND remarks != '')").fetchall()]
-            for _, r_row in r_df.iterrows():
-                p = str(r_row.get('phone', ''))
-                if p and p not in p_existing:
-                    c = str(r_row.get('call_status', ''))
-                    su = str(r_row.get('status_update', ''))
-                    it = str(r_row.get('issue_type', ''))
-                    poa = str(r_row.get('plan_of_action', ''))
-                    rem = str(r_row.get('remarks', ''))
-                    fu = str(r_row.get('follow_up', ''))
-                    l_at = str(r_row.get('last_call_at', ''))
-                    conn.execute("DELETE FROM customer_interactions WHERE phone = ?", (p,))
-                    conn.execute('''
-                        INSERT INTO customer_interactions (phone, call_status, status_update, issue_type, plan_of_action, remarks, follow_up, last_call_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (p, c, su, it, poa, rem, fu, l_at))
-            conn.commit()
+                r_df = pd.read_sql("SELECT * FROM customer_interactions", r_conn)
+            if not r_df.empty:
+                dest_cols = [c[1] for c in conn.execute("PRAGMA table_info(customer_interactions)").fetchall()]
+                valid_cols = [c for c in r_df.columns if c in dest_cols]
+                if valid_cols:
+                    col_names = ", ".join(valid_cols)
+                    placeholders = ", ".join(["?"] * len(valid_cols))
+                    update_parts = [f"{c} = COALESCE(excluded.{c}, customer_interactions.{c})" for c in valid_cols if c != 'phone']
+                    update_clause = ", ".join(update_parts)
+                    upsert_sql = f'''
+                        INSERT INTO customer_interactions ({col_names})
+                        VALUES ({placeholders})
+                        ON CONFLICT(phone) DO UPDATE SET {update_clause}
+                    '''
+                    for _, r_row in r_df[valid_cols].iterrows():
+                        conn.execute(upsert_sql, tuple(r_row))
+                    conn.commit()
         except Exception:
             pass
 except Exception:
@@ -1640,8 +1639,11 @@ def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
     
     for row in selected_rows:
         name = str(row.get('Name', 'Customer'))
-        p = str(row.get('phone', '')).replace('.0', '').strip()
-        if not p:
+        raw_p = str(row.get('phone', '')).replace('.0', '').strip()
+        clean_p = re.sub(r'\D', '', raw_p)
+        if len(clean_p) > 10:
+            clean_p = clean_p[-10:]
+        if not clean_p:
             continue
         
         row_copy = dict(row)
@@ -1652,24 +1654,26 @@ def process_free_wa_dispatch_safe(selected_rows, conn, usage_check_col=None):
         if not link or str(link).strip() == '':
             link = generate_wa_link(row_copy)
             
+        now_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         conn.execute('''
-            INSERT INTO customer_interactions (phone, free_wa_sent)
-            VALUES (?, 1)
-            ON CONFLICT(phone) DO UPDATE SET free_wa_sent = 1
-        ''', (p,))
+            INSERT INTO customer_interactions (phone, free_wa_sent, last_free_wa_sent_at)
+            VALUES (?, 1, ?)
+            ON CONFLICT(phone) DO UPDATE SET free_wa_sent = 1, last_free_wa_sent_at = ?
+        ''', (clean_p, now_ts, now_ts))
         
         usage_val = str(row_copy.get('Usage check', ''))
         email_val = str(row_copy.get('email', ''))
         if 'log_outreach_event' in globals():
-            log_outreach_event("Free WhatsApp", usage_val, name, p, email_val, 'Free WA Web Link', 'SUCCESS')
+            log_outreach_event("Free WhatsApp", usage_val, name, clean_p, email_val, 'Free WA Web Link', 'SUCCESS')
             
         if link:
             success_count += 1
-            links_to_show.append((name, p, link))
+            links_to_show.append((name, clean_p, link))
             
     conn.commit()
+    st.cache_data.clear()
     
-    st.success(f"✅ Free WhatsApp status marked as Sent for {success_count} customers!")
+    st.success(f"✅ Free WhatsApp status marked as Sent for {success_count} customers! Dashboard updated.")
     if links_to_show:
         # Inject JavaScript to open WhatsApp Web tabs directly in the user's browser
         js_code = "<script>\n"
@@ -2617,13 +2621,34 @@ def render_dashboard(df_sales, prefix):
 
         dash_df['phone'] = dash_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
         trackable_df['phone'] = trackable_df['phone'].astype(str).str.replace('.0', '', regex=False).str.strip()
-        db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action']
+
+        # 10-digit clean phone standardization for 100% robust database matching
+        trackable_df['phone_clean'] = trackable_df['phone'].astype(str).str.replace(r'\D', '', regex=True).str[-10:]
+        interactions_dash_clean = interactions_dash.copy()
+        interactions_dash_clean['phone_clean'] = interactions_dash_clean['phone'].astype(str).str.replace(r'\D', '', regex=True).str[-10:]
+        interactions_dash_clean = interactions_dash_clean.drop_duplicates(subset=['phone_clean'], keep='last')
+
+        db_cols_dash = ['wa_sent', 'free_wa_sent', 'email_sent', 'call_status', 'remarks', 'follow_up', 'issue_type', 'plan_of_action', 'support_ticket_sent']
         trackable_df = trackable_df.drop(columns=[c for c in db_cols_dash if c in trackable_df.columns], errors='ignore')
-        dash_merged = pd.merge(trackable_df, interactions_dash, on='phone', how='left')
+        dash_merged = pd.merge(trackable_df, interactions_dash_clean, on='phone_clean', how='left', suffixes=('', '_db'))
 
         wa_sent_count = int(dash_merged['wa_sent'].fillna(0).astype(bool).sum()) if 'wa_sent' in dash_merged.columns else 0
         free_wa_count = int(dash_merged['free_wa_sent'].fillna(0).astype(bool).sum()) if 'free_wa_sent' in dash_merged.columns else 0
         email_sent_count = int(dash_merged['email_sent'].fillna(0).astype(bool).sum()) if 'email_sent' in dash_merged.columns else 0
+        calls_logged_count = int(dash_merged['call_status'].fillna('').astype(str).str.strip().ne('').sum()) if 'call_status' in dash_merged.columns else 0
+        tickets_sent_count = int(dash_merged['support_ticket_sent'].fillna(0).astype(bool).sum()) if 'support_ticket_sent' in dash_merged.columns else 0
+
+        # Unique customers reached across ANY channel (WA API, Free WA, Email, Telecall, Support Ticket)
+        is_reached_mask = (
+            dash_merged['wa_sent'].fillna(0).astype(bool) |
+            dash_merged['free_wa_sent'].fillna(0).astype(bool) |
+            dash_merged['email_sent'].fillna(0).astype(bool) |
+            (dash_merged['call_status'].fillna('').astype(str).str.strip() != '') |
+            (dash_merged['remarks'].fillna('').astype(str).str.strip() != '') |
+            (dash_merged['support_ticket_sent'].fillna(0).astype(bool) if 'support_ticket_sent' in dash_merged.columns else False)
+        )
+        total_reached = int(is_reached_mask.sum())
+        not_reached = max(0, trackable_cx - total_reached)
 
         # ── ROW 1: KPI Cards ──
         k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
@@ -2636,13 +2661,12 @@ def render_dashboard(df_sales, prefix):
         k7.metric("🤝 Channel Partner", channel_partner, delta="Counted Separately", delta_color="off", help="Channel Partners are separated because usage cannot be tracked")
 
         # ── ROW 2: Outreach KPIs ──
-        o1, o2, o3, o4 = st.columns(4)
+        o1, o2, o3, o4, o5 = st.columns(5)
         o1.metric("📩 WA API Sent", wa_sent_count, delta=f"{round(wa_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
         o2.metric("💬 Free WA Sent", free_wa_count, delta=f"{round(free_wa_count/trackable_cx*100)}%" if trackable_cx else "0%")
         o3.metric("📧 Emails Sent", email_sent_count, delta=f"{round(email_sent_count/trackable_cx*100)}%" if trackable_cx else "0%")
-        total_reached = len(dash_merged[(dash_merged['wa_sent'].fillna(0).astype(bool)) | (dash_merged['free_wa_sent'].fillna(0).astype(bool)) | (dash_merged['email_sent'].fillna(0).astype(bool))])
-        not_reached = trackable_cx - total_reached
-        o4.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse")
+        o4.metric("📞 Calls Contacted", calls_logged_count, delta=f"{round(calls_logged_count/trackable_cx*100)}%" if trackable_cx else "0%")
+        o5.metric("🚫 Not Reached Yet", not_reached, delta=f"{round(not_reached/trackable_cx*100)}%" if trackable_cx else "0%", delta_color="inverse", help="Customers who have not received any outreach message (WhatsApp, Email) and have no call logged.")
 
         # ── ROW 3: Charts ──
         ch1, ch2 = st.columns(2)
@@ -3219,36 +3243,74 @@ def render_crm(cx_df):
         count_selected = len(selected_pwa_df)
 
         is_admin_user = st.session_state.get('admin_unlocked', False)
-        if not is_admin_user:
-            st.warning("🔒 **Outreach & Manual Save Locked**: Admin access required to send bulk WhatsApp/Emails, auto-dispatch, or save database edits. Please unlock Admin Mode in sidebar (Password: `credflow2026`).")
+        
+        # Action Toolbar (Row 1: Free Outreach & 1-Click Status Update - No Admin Lock Required)
+        st.info("💡 **Kaise Bhejein & Live Update Karein:** Customers ko select karein ➔ **'💬 Free WA (Open Web Links)'** ya table ke **'Chat 💬'** link se message bhejein ➔ Phir **'✅ Mark Selected as WhatsApp Sent'** dabayein. Dashboard ka 'Not Reached Yet' counter turant kam ho jayega!")
 
-        col_dt, col_pwa, col_crm = st.columns([3.5, 3.5, 3])
-        with col_dt:
+        col_act1, col_act2, col_act3, col_act4 = st.columns([3.5, 3.5, 2.5, 2.5])
+        with col_act1:
+            btn_mark_wa_sent = st.button(
+                f"✅ Mark Selected as WhatsApp Sent ({count_selected})",
+                type="primary" if count_selected > 0 else "secondary",
+                use_container_width=True,
+                help="Marks all selected customers as 'Free WhatsApp Sent' in the database and updates 'Not Reached Yet' counter immediately!"
+            )
+        with col_act2:
+            free_wa_clicked = st.button("💬 Free WA (Open Web Links)", use_container_width=True, help="100% Free - Generates and opens 1-click WhatsApp Web chat tabs and marks them as sent!")
+        with col_act3:
             st.download_button(
                 f"🖥️ Export Desktop Queue ({count_selected})",
                 data=desktop_queue_json,
                 file_name="wa_desktop_queue.json",
                 mime="application/json",
-                type="primary" if count_selected > 0 else "secondary",
                 use_container_width=True,
                 help="🌟 100% Free & Unlimited! Downloads 'wa_desktop_queue.json' directly to your Downloads folder. Then run 'CredFlow_WhatsApp_AutoSender' on your Desktop to dispatch automatically without any limits!"
             )
-        with col_pwa:
-            pwa_clicked = st.button("📲 Auto-Send via Green-API", disabled=not is_admin_user, use_container_width=True, help="Cloud API Gateway send. Requires Admin Access.")
-        with col_crm:
+        with col_act4:
             excel_crm = to_excel_download(edited_df, sheet_name="CRM Data")
             st.download_button("📥 Export CRM Excel", data=excel_crm, file_name="CRM_Data_Export.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
 
-        col1, col2, col3 = st.columns([3.5, 3.5, 3])
-        with col1:
+        # Action Toolbar (Row 2: Automated Background Dispatchers)
+        col_api1, col_api2, col_api3 = st.columns([3.5, 3.5, 3])
+        with col_api1:
             wa_clicked = st.button("⚡ Auto-Send WA (Interakt API)", disabled=not is_admin_user, use_container_width=True, help="Automatically sends WhatsApp in the background via official Interakt API. Requires Admin Access.")
-        with col2:
+        with col_api2:
             em_clicked = st.button("🚀 Send Emails (SMTP)", disabled=not is_admin_user, type="secondary", use_container_width=True)
-        with col3:
-            free_wa_clicked = st.button("💬 Free WA (Web Links)", disabled=not is_admin_user, type="secondary", use_container_width=True, help="100% Free - Generates 1-click WhatsApp Web chat links. Requires Admin Access.")
+        with col_api3:
+            pwa_clicked = st.button("📲 Auto-Send via Green-API", disabled=not is_admin_user, use_container_width=True, help="Cloud API Gateway send. Requires Admin Access.")
 
-        if count_selected > 0:
-            st.info(f"💡 **Unlimited Free Auto-Sending:** {count_selected} customers selected! Click **'🖥️ Export Desktop Queue'** above ➔ Open **'CredFlow_WhatsApp_AutoSender'** on your Desktop ➔ Click **'🚀 Start Auto-Sending'**.")
+        if not is_admin_user:
+            st.caption("🔒 *Interakt WA API, Green-API, and SMTP Email require Admin Access (Sidebar password: `credflow2026`). Free WhatsApp and CRM edits are always open.*")
+
+        if btn_mark_wa_sent:
+            selected_for_mark = edited_df[(edited_df['📱 Send Free WA'] == True) | (edited_df['📩 Send API'] == True)]
+            if selected_for_mark.empty:
+                st.warning("⚠️ Pehle table mein '📱 Send Free WA' ya '📩 Send API' checkbox tick karein jin customers ko message bhej diya hai.")
+            else:
+                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                m_count = 0
+                for _, r_m in selected_for_mark.iterrows():
+                    raw_p = str(r_m.get('phone', '')).replace('.0', '').strip()
+                    clean_p = re.sub(r'\D', '', raw_p)
+                    if len(clean_p) > 10:
+                        clean_p = clean_p[-10:]
+                    if not clean_p:
+                        continue
+                    conn.execute('''
+                        INSERT INTO customer_interactions (phone, free_wa_sent, last_free_wa_sent_at)
+                        VALUES (?, 1, ?)
+                        ON CONFLICT(phone) DO UPDATE SET free_wa_sent = 1, last_free_wa_sent_at = ?
+                    ''', (clean_p, now_str, now_str))
+                    c_name = str(r_m.get('Name', 'Customer'))
+                    u_val = str(r_m.get('Usage check', ''))
+                    e_val = str(r_m.get('email', ''))
+                    log_outreach_event("Free WhatsApp", u_val, c_name, clean_p, e_val, "Manual Mark as Sent", "SUCCESS")
+                    m_count += 1
+                conn.commit()
+                st.cache_data.clear()
+                st.success(f"✅ {m_count} customers ko WhatsApp Sent mark kar diya gaya hai! Dashboard ka 'Not Reached Yet' counter update ho gaya hai.")
+                time.sleep(1)
+                st.rerun(scope="app")
 
         if pwa_clicked:
             selected_pwa_df = edited_df[(edited_df['📩 Send API'] == True) | (edited_df['📱 Send Free WA'] == True)]
@@ -3323,7 +3385,7 @@ def render_crm(cx_df):
                 if success_count > 0:
                     st.success(f"✅ Successfully sent {success_count} messages via Interakt and auto-saved their status!")
                     time.sleep(1)
-                    st.rerun() # Refresh table to show ticks
+                    st.rerun(scope="app") # Refresh table to show ticks
 
         if free_wa_clicked:
             selected_free_wa_df = edited_df[edited_df['📱 Send Free WA'] == True]
@@ -3360,11 +3422,11 @@ def render_crm(cx_df):
                     else:
                         st.error(f"Failed to send emails: {result}")
 
-        # ── MANUAL SAVE CRM CHANGES BUTTON ──
+        # ── MANUAL SAVE CRM CHANGES BUTTON (OPEN TO ALL AGENTS) ──
         st.markdown("<br>", unsafe_allow_html=True)
         col_sv1, col_sv2 = st.columns([3, 7])
         with col_sv1:
-            save_crm_btn = st.button("💾 Save CRM Changes to Database", type="primary", disabled=not is_admin_user, use_container_width=True, key="btn_save_crm_manual_edits")
+            save_crm_btn = st.button("💾 Save CRM Changes to Database", type="primary", use_container_width=True, key="btn_save_crm_manual_edits")
 
         editor_state = st.session_state.get(editor_key, {})
         user_edited_rows = editor_state.get("edited_rows", {}) if isinstance(editor_state, dict) else {}
@@ -3390,7 +3452,9 @@ def render_crm(cx_df):
             if edited_indices:
                 changed_rows = edited_df.loc[edited_indices]
                 for idx, row in changed_rows.iterrows():
-                    p = str(row.get('phone', '')).replace('.0', '').strip()
+                    p_raw = str(row.get('phone', '')).replace('.0', '').strip()
+                    p = re.sub(r'\D', '', p_raw)
+                    if len(p) > 10: p = p[-10:]
                     if not p: continue
                     set_clauses = []
                     params = []
@@ -3422,9 +3486,10 @@ def render_crm(cx_df):
                         '''
                         conn.execute(sql, [p] + params)
                 conn.commit()
-                st.success(f"✅ Successfully saved {len(edited_indices)} customer changes to database!")
+                st.cache_data.clear()
+                st.success(f"✅ Successfully saved {len(edited_indices)} customer changes to database! Dashboard updated.")
                 time.sleep(1)
-                st.rerun()
+                st.rerun(scope="app")
             else:
                 st.info("ℹ️ No modified rows detected to save.")
 def render_telecalling_analytics(conn):
