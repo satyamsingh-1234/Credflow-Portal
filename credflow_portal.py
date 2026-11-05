@@ -81,7 +81,7 @@ try:
         conn.execute("INSERT OR IGNORE INTO known_channel_partners (phone, name, partner_name, tag_source) VALUES (?, ?, ?, ?)", cp)
     conn.commit()
 
-    TARGET_SCORING_VER = 'v20261102_fresh_sync_credit_lookup'
+    TARGET_SCORING_VER = 'v20261105_october_sync_credit_lookup'
     cur = conn.cursor()
     cur.execute("SELECT value FROM app_settings WHERE key = 'scoring_version'")
     s_ver_row = cur.fetchone()
@@ -98,8 +98,8 @@ try:
         clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
         clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (TARGET_SCORING_VER,))
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 02 Nov Credit & App Data)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '02 Nov 2026, 10:30 AM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 05 Nov Credit & App Data, incl. October)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '05 Nov 2026, 01:00 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         conn.commit()
 
         ver_csv = os.path.join(os.path.dirname(__file__), "customer_version_detail_extracted.csv")
@@ -2347,11 +2347,11 @@ def render_dashboard(df_sales, prefix):
         if recent_batches:
             latest_file_name = str(recent_batches[-1])
 
-    if not latest_file_name or latest_file_name in ['September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
-        latest_file_name = "Unified Master Sheet (Synced with 02 Nov Credit & App Data)"
+    if not latest_file_name or latest_file_name in ['October.csv', 'September.csv', 'aug2609.csv', 'july2609.csv', 'nan', 'none', '']:
+        latest_file_name = "Unified Master Sheet (Synced with 05 Nov Credit & App Data, incl. October)"
 
     if not latest_update_time or '07 Oct' in str(latest_update_time) or '13 Oct' in str(latest_update_time) or '15 Oct' in str(latest_update_time) or 'September' in str(latest_update_time):
-        latest_update_time = "02 Nov 2026, 10:30 AM (Live & Synced)"
+        latest_update_time = "05 Nov 2026, 01:00 PM (Live & Synced)"
 
     if latest_file_name:
         st.markdown(f"""
@@ -2380,19 +2380,20 @@ def render_dashboard(df_sales, prefix):
     if 'Upload_Batch' in df_sales.columns:
         for b in df_sales['Upload_Batch'].dropna().unique():
             b_str = str(b).strip()
-            if b_str and b_str not in ['July.csv', 'Aug.csv', 'Sep.csv', 'September.csv', 'july2609.csv', 'aug2609.csv', 'nan', 'none', '']:
+            if b_str and b_str not in ['July.csv', 'Aug.csv', 'Sep.csv', 'October.csv', 'September.csv', 'july2609.csv', 'aug2609.csv', 'nan', 'none', '']:
                 batches_in_data.append(b_str)
 
     dp_opts = [
-        "🌐 Overall Data (July + Aug + Sep Combined)",
+        "🌐 Overall Data (July + Aug + Sep + Oct Combined)",
+        "October Cohort Data",
         "September Cohort Data",
         "August Cohort Data",
         "July Cohort Data",
     ]
-    if latest_file_name and latest_file_name not in ['September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
+    if latest_file_name and latest_file_name not in ['October.csv', 'September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
         dp_opts.append(f"📁 Today / Latest: {latest_file_name}")
     for b in batches_in_data:
-        if b != latest_file_name and b not in ['September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
+        if b != latest_file_name and b not in ['October.csv', 'September.csv', 'aug2609.csv', 'july2609.csv', 'July.csv', 'Aug.csv', 'Sep.csv']:
             dp_opts.append(f"📁 Batch: {b}")
 
     dp_opts.extend([
@@ -2500,6 +2501,17 @@ def render_dashboard(df_sales, prefix):
                     batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
             else:
                 batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 8)
+            filtered = filtered[batch_mask]
+            eval_df = eval_df[batch_mask]
+        elif date_preset == "October Cohort Data" or (date_preset.startswith("October") and not date_preset.startswith("📁")):
+            if 'Upload_Batch' in eval_df.columns:
+                batch_mask = eval_df['Upload_Batch'].astype(str).apply(
+                    lambda b: any(k in b.strip().lower() for k in ['oct', '102026', 'october'])
+                )
+                if not batch_mask.any():
+                    batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 10)
+            else:
+                batch_mask = (eval_df['effective_date'].apply(lambda d: d.month if d else None) == 10)
             filtered = filtered[batch_mask]
             eval_df = eval_df[batch_mask]
         elif date_preset == "September Cohort Data" or (date_preset.startswith("September") and not date_preset.startswith("📁")):
@@ -4804,8 +4816,8 @@ if is_admin:
             clean_df = pd.read_csv(csv_master, compression='gzip').drop_duplicates()
             clean_df.to_sql("sales_plan_history", conn, if_exists="replace", index=False)
             conn.execute("INSERT INTO app_settings (key, value) VALUES ('scoring_version', 'v20261102_fresh_sync_credit_lookup') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 02 Nov Credit & App Data)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '02 Nov 2026, 10:30 AM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_uploaded_file', 'Unified Master Sheet (Synced with 05 Nov Credit & App Data, incl. October)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+            conn.execute("INSERT INTO app_settings (key, value) VALUES ('last_upload_time', '05 Nov 2026, 01:00 PM (Live & Synced)') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
             conn.commit()
             st.cache_data.clear()
             st.sidebar.success("✅ Database restored to July + August + September (1,069 Customers)!")
